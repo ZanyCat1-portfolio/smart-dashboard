@@ -1,0 +1,81 @@
+{
+  "_meta": {
+    "example": true,
+    "info": "This is an example devices.json. Edit this file with your device info. If using Docker, mount your own devices.json to /app/public/devices.json to override."
+  },
+  "_tasmota": true,
+  "fireplaceblowerfan": {
+    "ip": "192.168.0.001",
+    "type": "tasmota",
+    "label": "Fireplace Blower Fan",
+    "verified": true,
+    "example": true
+  },
+  "livingroomstandlight": {
+    "ip": "192.168.0.002",
+    "type": "tasmota",
+    "label": "Living Room Stand Light",
+    "verified": true,
+    "example": true
+  },
+  "Dead Endpoint": {
+    "ip": "192.168.0.003",
+    "type": "tasmota",
+    "label": "Dead Endpoint",
+    "verified": false,
+    "example": false
+  },
+  "_govee": true,
+  "tv-led": {
+    "type": "govee",
+    "device": "00:AA:00:00:A0:A0:A0:00",
+    "model": "H6167",
+    "label": "TV LED Strip",
+    "verified": true,
+    "example": true
+  },
+  "ceilingfan": {
+    "ip": "192.168.0.004",
+    "type": "tasmota",
+    "label": "Living Room Ceiling Fan",
+    "verified": true,
+    "example": true
+  },
+  "livingroomsecondlight": {
+    "ip": "192.168.0.005",
+    "type": "tasmota",
+    "label": "Living Room Second Light",
+    "verified": true,
+    "example": true
+  },
+  "gazebofan": {
+    "ip": "192.168.0.006",
+    "type": "tasmota",
+    "label": "Gazebo Fan",
+    "verified": true,
+    "example": true
+  },
+  "gazebolights": {
+    "ip": "192.168.0.007",
+    "type": "tasmota",
+    "label": "Gazebo Lights",
+    "verified": true,
+    "example": true
+  },
+  "under-cabinet-led": {
+    "type": "govee",
+    "device": "00:AA:00:00:A0:A0:A0:0A",
+    "model": "H6167",
+    "label": "Under Cabinet LED Strip",
+    "verified": true,
+    "example": true
+  },
+  "above-cabinet-led": {
+    "type": "govee",
+    "device": "00:AA:00:00:A0:A0:A0:AA",
+    "model": "H6167",
+    "label": "Above Cabinet LED Strip",
+    "verified": true,
+    "example": true
+  }
+}

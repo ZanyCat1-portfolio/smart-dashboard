@@ -1,0 +1,221 @@
+/* ===========================
+   Root & Base Theme
+   =========================== */
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* Default to dark background; prefer light in media query below */
+  color-scheme: light dark;
+  color: #fff;
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===========================
+   Responsive Theme Switching
+   =========================== */
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover { color: #747bff; }
+  button { background-color: #f9f9f9; }
+}
+
+/* ===========================
+   Body & Layout
+   =========================== */
+body,
+#app {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #fff;
+  color: #222;
+  transition: background-color 300ms, color 300ms;
+  display: flex;
+  place-items: center;
+}
+#app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+/* ===========================
+   Headings, Cards, Links
+   =========================== */
+h1 { font-size: 3.2em; line-height: 1.1; }
+.card { padding: 2em; transition: background-color 300ms, color 300ms, border-color 300ms; }
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover { color: #535bf2; }
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover { border-color: #646cff; }
+button:focus, button:focus-visible { outline: 4px auto -webkit-focus-ring-color; }
+
+/* ===========================
+   Sticky Nav & Transitions
+   =========================== */
+.sticky-nav {
+  position: sticky;
+  top: 0;
+  background: var(--bs-body-bg);
+  z-index: 100;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+body, html, nav.sticky-nav, .btn,
+.nav-tabs .nav-link, .form-switch .form-check-input, .form-check-input::before {
+  transition: background-color 300ms, color 300ms, border-color 300ms, transform 300ms;
+}
+
+/* ===========================
+   Custom Toggle Switch
+   =========================== */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 3rem;     /* 48px */
+  height: 1.5rem;  /* 24px */
+  border-radius: 9999px;
+  background-color: #d1d5db;
+  transition: background-color 200ms ease-in-out;
+  appearance: none;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.toggle-switch:checked { background-color: #22c55e; }
+
+.toggle-switch::before {
+  content: '';
+  position: absolute;
+  left: 0.25rem;
+  top: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  background: #fff;
+  transition: transform 200ms;
+  transform: translateX(0);
+}
+.toggle-switch:checked::before {
+  transform: translateX(1.5rem);
+}
+
+/* ===========================
+   Card Stylings
+   =========================== */
+
+.card-title {
+  max-width: 200px;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+/* ===========================
+   Bootstrap/Dark Mode Overrides
+   =========================== */
+.dark-mode,
+#app.dark {
+  --bs-body-bg: #121212;
+  --bs-body-color: #e0e0e0;
+  background-color: var(--bs-body-bg) !important;
+  color: var(--bs-body-color) !important;
+}
+.dark-mode .card,
+#app.dark .card {
+  background-color: #1e1e1e !important;
+  border-color: #333 !important;
+}
+.dark-mode .nav-tabs .nav-link,
+#app.dark .nav-tabs .nav-link {
+  color: #ccc;
+}
+.dark-mode .nav-tabs .nav-link.active,
+#app.dark .nav-tabs .nav-link.active {
+  background-color: #333;
+}
+.dark-mode .card-header,
+#app.dark .card-header {
+  background-color: #444;
+}
+.dark-mode .card-title,
+#app.dark .card-title {
+  color: #ffe082;
+  transition: color 300ms;
+}
+
+/* Bootstrap switch/input overrides in dark mode */
+.dark-mode .form-switch .form-check-input,
+#app.dark .form-switch .form-check-input {
+  background-color: #444;
+  border-color: #555;
+}
+.dark-mode .form-switch .form-check-input::before,
+#app.dark .form-switch .form-check-input::before {
+  background-color: #fff;
+}
+.dark-mode .form-switch .form-check-input:checked,
+#app.dark .form-switch .form-check-input:checked {
+  background-color: #666;
+}
+.dark-mode .form-switch .form-check-input:focus,
+#app.dark .form-switch .form-check-input:focus {
+  box-shadow: 0 0 0 .25rem rgba(255,255,255,0.25);
+}
+
+/* ===========================
+   Form Input Colors
+   =========================== */
+input.form-control {
+  transition: background-color 300ms, color 300ms, border-color 300ms;
+}
+.dark-mode input.form-control,
+#app.dark input.form-control {
+  background-color: #e0e0e0 !important;
+  color: #0e0e0e !important;
+  border-color: #444 !important;
+}
+
+/* Autofill fix for Chrome/Safari */
+input.form-control:-webkit-autofill,
+input.form-control:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #e0e0e0 inset !important;
+  box-shadow: 0 0 0 1000px #e0e0e0 inset !important;
+  color: #0e0e0e !important;
+  -webkit-text-fill-color: #0e0e0e !important;
+}
+
+/* ===========================
+   Misc
+   =========================== */
+html { scroll-behavior: smooth; }
