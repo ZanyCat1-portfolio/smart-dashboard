@@ -6,21 +6,21 @@
     <!-- Card Header: Icon, Name, Verified badge -->
     <div class="card-header d-flex justify-content-between align-items-center py-2 px-3">
       <div class="d-flex align-items-center w-100" style="min-width:0;">
-      <span v-if="icon" class="me-2 flex-shrink-0">
+        <span v-if="icon" class="me-2 flex-shrink-0">
           <slot name="icon"><i :class="icon"></i></slot>
-      </span>
-      <span
+        </span>
+        <span
           class="fw-bold card-title flex-grow-1"
           :title="label"
-      >{{ label }}</span>
+        >{{ label }}</span>
       </div>
       <slot name="status"></slot>
     </div>
 
-    <!-- Main Card Body: Actions/Controls -->
+    <!-- Main Card Body: Actions/Controls & Default Content -->
     <div class="card-body p-3 d-flex flex-column align-items-center">
       <slot name="actions"></slot>
-      <!-- Add more slots for extra UI as needed -->
+      <slot /> <!-- This default slot enables Timer and other child content to appear -->
     </div>
 
     <!-- Optional Card Footer (for timers, metadata, etc) -->
@@ -29,6 +29,7 @@
     </div>
   </div>
 </template>
+
 
 <script setup>
 /**

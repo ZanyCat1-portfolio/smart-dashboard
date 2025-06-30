@@ -20,14 +20,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
 import BaseDeviceCard from './BaseDeviceCard.vue';
+import { ref } from 'vue';
 
 const props = defineProps({
-  device: {
-    type: Object,
-    required: true
-  }
+  device: { type: Object, required: true },
+  getApiRoute: { type: Function, required: true }
 });
 
 const actionLoading = ref(false);
@@ -37,7 +35,8 @@ async function sendOn() {
   actionLoading.value = true;
   actionMessage.value = '';
   try {
-    await fetch(`/api/govee/${props.device.device}/on`, { method: 'POST' });
+    const url = props.getApiRoute(props.device, 'on');
+    await fetch(url, { method: 'POST' });
     actionMessage.value = 'Sent ON';
   } catch (err) {
     actionMessage.value = 'Error sending ON';
@@ -49,7 +48,8 @@ async function sendOff() {
   actionLoading.value = true;
   actionMessage.value = '';
   try {
-    await fetch(`/api/govee/${props.device.device}/off`, { method: 'POST' });
+    const url = props.getApiRoute(props.device, 'off');
+    await fetch(url, { method: 'POST' });
     actionMessage.value = 'Sent OFF';
   } catch (err) {
     actionMessage.value = 'Error sending OFF';

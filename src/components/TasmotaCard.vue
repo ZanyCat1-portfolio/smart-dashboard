@@ -114,13 +114,13 @@ export default {
   },
 
   mounted() {
-    console.log('TasmotaCard props:', {
-      timerState: this.timerState,
-      timerDisplay: this.timerDisplay,
-      onStartTimer: this.onStartTimer,
-      onAddToTimer: this.onAddToTimer,
-      onCancelTimer: this.onCancelTimer
-    });
+    // console.log('TasmotaCard props:', {
+    //   timerState: this.timerState,
+    //   timerDisplay: this.timerDisplay,
+    //   onStartTimer: this.onStartTimer,
+    //   onAddToTimer: this.onAddToTimer,
+    //   onCancelTimer: this.onCancelTimer
+    // });
   },
   methods: {
     async onOptimisticToggle(newValue) {

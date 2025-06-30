@@ -121,7 +121,12 @@ mqttClient.on('message', (topic, payload) => {
 
 // ───── API Routes ─────
 
+// const router = express.Router();
+// const timerApi = require('./timer-api')(io);
+// app.use('/api/timers', timerApi);
 const router = express.Router();
+const timerApi = require('./timer-api')(io);
+app.use('/api/timers', timerApi);
 
 // --------- DEMO ROUTES ---------------
 
@@ -229,6 +234,52 @@ router.all('/example/:device/:action', (req, res) => {
 
   return res.json({ success: true, state: newState });
 });
+
+// -------- DEMO Govee -----------
+
+// In-memory state for demo/example Govee devices
+const demoGoveeState = {};
+
+// Demo Govee device ON/OFF/status
+router.all('/example/govee/:device/:action', (req, res) => {
+  const { device, action } = req.params;
+  const dev = getDevice(device);
+  if (!dev || dev.type !== 'govee' || !isDemo(dev) || !['on', 'off', 'toggle', 'status'].includes(action)) {
+    return res.status(404).json({ error: 'Unknown demo Govee device or action' });
+  }
+
+  // Status
+  if (action === 'status') {
+    return res.json({
+      Status: { Power: demoGoveeState[dev.endpoint] || 'off' }
+    });
+  }
+
+  // Toggle/on/off logic
+  let curr = demoGoveeState[dev.endpoint] || 'off';
+  let newState;
+  if (action === 'toggle') {
+    newState = curr === 'on' ? 'off' : 'on';
+  } else if (action === 'on') {
+    newState = 'on';
+  } else if (action === 'off') {
+    newState = 'off';
+  }
+  demoGoveeState[dev.endpoint] = newState;
+
+  // Optional: emit status to websockets if you want demo Govee to show real-time updates
+  io.emit('device-status', { endpoint: dev.endpoint, state: newState });
+
+  return res.json({ success: true, state: newState });
+});
+
+// Optionally, a timer/status route for demo Govee devices (if your frontend expects it)
+router.get('/example/govee/:device/timer/status', (req, res) => {
+  // You can expand with timer logic if needed
+  res.json({ running: false, power: demoGoveeState[req.params.device] || 'off' });
+});
+
+
 
 // -------- REAL DEVICE ROUTES --------
 

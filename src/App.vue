@@ -13,7 +13,6 @@
       {{ exampleInfo }}
     </div>
 
-    <!-- Navigation Links to Groups -->
     <nav class="mb-4 sticky-nav">
       <ul class="nav nav-tabs">
         <li v-for="type in Object.keys(groupedDevices)" :key="type" class="nav-item">
@@ -51,23 +50,85 @@
         </div>
 
         <div v-show="openGroups[type]" class="card-body">
-          <div class="row row-cols-1 row-cols-md-2 g-4">
-            <div v-for="device in devices" :key="device.endpoint" class="col">
-              <component
-                :is="getCardComponent(device)"
-                :device="device"
-                :state="computedDeviceState(device.endpoint)"
-                :theme="theme"
-                :get-api-route="getApiRoute"
-                :timer-state="timerStates[device.endpoint]"
-                :timer-display="timerDisplays[device.endpoint]"
-                :on-start-timer="(minutes) => startTimer(device, minutes)"
-                :on-add-to-timer="(minutes) => addToTimer(device, minutes)"
-                :on-cancel-timer="() => cancelTimer(device)"
-                @refresh="fetchStatus(device)"
+          <!-- Timers group (dashboard timers only, uses new logic) -->
+          <template v-if="type === 'timers'">
+            <div class="mb-3 d-flex align-items-center gap-2">
+              <button class="btn btn-success" @click="showTimerForm = !showTimerForm">
+                <span v-if="!showTimerForm">+ Add Timer</span>
+                <span v-else>Cancel</span>
+              </button>
+              <button class="btn btn-secondary" @click="showHistory">
+                View Timer History
+              </button>
+            </div>
+            <div v-if="showTimerForm" class="mb-4">
+              <TimerCreateForm
+                @create="addDashboardTimer"
+                @cancel="showTimerForm = false"
               />
             </div>
-          </div>
+            <div v-if="timers.length === 0" class="text-muted mb-3">
+              No timers yet. Click <b>+ Add Timer</b> to create one.
+            </div>
+            <div class="row row-cols-1 row-cols-md-2 g-4">
+              <div v-for="timer in timers" :key="timer.id" class="col">
+                <TimerCard
+                  :timer="timer"
+                  @start="min => startDashboardTimer(timer, min)"
+                  @add="min => addToDashboardTimer(timer, min)"
+                  @cancel="() => cancelDashboardTimer(timer)"
+                />
+              </div>
+            </div>
+            <div v-if="showTimerHistory" class="mb-4">
+              <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Timer History</h5>
+                <button class="btn btn-outline-secondary btn-sm" @click="showTimerHistory = false">
+                  Close
+                </button>
+              </div>
+              <div v-if="timerHistory.length === 0" class="mt-3 text-muted">No timer history yet.</div>
+              <ul v-else class="list-group mt-3">
+                <li v-for="t in timerHistory" :key="t.id" class="list-group-item d-flex justify-content-between align-items-center">
+                  <span>
+                    <b>{{ t.name }}</b> 
+                    <span v-if="t.canceled" class="badge bg-warning text-dark ms-2">Canceled</span>
+                    <span v-else class="badge bg-success ms-2">Completed</span>
+                  </span>
+                  <span>
+                    <span class="text-muted">{{ formatDate(t.lastAction || t.created) }}</span>
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </template>
+
+
+
+
+
+
+
+          <!-- All other device groups (Tasmota, Govee, etc.) use old logic untouched -->
+          <template v-else>
+            <div class="row row-cols-1 row-cols-md-2 g-4">
+              <div v-for="device in devices" :key="device.endpoint" class="col">
+                <component
+                  :is="getCardComponent(device)"
+                  :device="device"
+                  :state="computedDeviceState(device.endpoint)"
+                  :theme="theme"
+                  :get-api-route="getApiRoute"
+                  :timer-state="timerStates[device.endpoint]"
+                  :timer-display="timerDisplays[device.endpoint]"
+                  :on-start-timer="(minutes) => startDeviceTimer(device, minutes)"
+                  :on-add-to-timer="(minutes) => addToDeviceTimer(device, minutes)"
+                  :on-cancel-timer="() => cancelDeviceTimer(device)"
+                  @refresh="fetchStatus(device)"
+                />
+              </div>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -78,14 +139,15 @@
 import { io } from 'socket.io-client'
 import TasmotaCard from './components/TasmotaCard.vue'
 import GoveeCard from './components/GoveeCard.vue'
-import { useDeviceTimers } from './composables/useDeviceTimers'
+import TimerCard from './components/TimerCard.vue'
+import TimerCreateForm from './components/TimerCreateForm.vue'
+import { setDevtoolsHook } from 'vue'
 
-// Declare once at the top for use everywhere
 const base = import.meta.env.BASE_URL
 
 export default {
   name: 'App',
-  components: { TasmotaCard, GoveeCard },
+  components: { TimerCard, TimerCreateForm, TasmotaCard, GoveeCard },
   data() {
     return {
       loadingDevices: true,
@@ -96,11 +158,12 @@ export default {
       isExampleFile: false,
       exampleInfo: '',
       socket: null,
+      timers: [],
+      timerHistory: [],
+      showTimerForm: false,
+      showTimerHistory: false,
       timerStates: {},
-      timerDisplays: {},
-      startTimer: null,
-      addToTimer: null,
-      cancelTimer: null,
+      timerDisplays: {}
     }
   },
   computed: {
@@ -112,117 +175,281 @@ export default {
       for (const type in groups) {
         groups[type].sort((a, b) => a.label.localeCompare(b.label))
       }
-      return groups
+      return { timers: this.timers, ...groups }
     },
     computedDeviceState() {
       return (endpoint) => {
+        if (this.timerStates[endpoint]?.running === true) {
+          return 'on'
+        }
         return this.deviceStates[endpoint] ?? 'off'
       }
     },
   },
   async mounted() {
-    // Theme
+    // --- Devices First ---
+    await this.loadDevices();
+    Object.keys(this.groupedDevices).forEach(type => {
+      this.openGroups[type] = true
+    });
+
+    // --- Dashboard Timers ---
+    await this.loadDashboardTimers();
+    await this.loadDashboardTimerHistory();
+
+    // Poll dashboard timers every second
+    this.dashboardTimerPoll = setInterval(() => {
+      this.timers.forEach(timer => {
+        if (timer.running) this.fetchDashboardTimerStatus(timer);
+      });
+    }, 1000);
+
+    // Poll Tasmota device timers every second
+    this.tasmotaTimerPoll = setInterval(() => {
+      this.devices.forEach(device => {
+        if (device.type === 'tasmota') {
+          this.fetchTasmotaTimerStatus(device);
+        }
+      });
+    }, 1000);
+
+    // --- Theme ---
     const saved = localStorage.getItem('theme')
     if (saved) this.theme = saved
     document.body.classList.toggle('dark-mode', this.theme === 'dark')
     document.getElementById('app')?.classList.add(this.theme)
 
-    // Websocket
+    // --- WebSocket for device/timer updates ---
     this.socket = io(window.location.origin, {
       path: '/socket.io',
       transports: ['websocket', 'polling']
     })
     this.socket.on('connect', () => console.log('[WS] Connected'))
-
-    // Device ON/OFF state updates
     this.socket.on('device-status', ({ endpoint, state }) => {
-      console.log('[SOCKET RECEIVED] device-status:', endpoint, state);
       this.deviceStates[endpoint] = state
     })
-
-    // Timer updates (from backend)
     this.socket.on('timer-update', ({ device, endTime, running }) => {
       if (!this.timerStates) this.timerStates = {};
       const endpoint = device;
       if (!endpoint) return;
       this.timerStates[endpoint] = { running: !!running, endTime: endTime || null };
-      // if (running) {
-      //   this.deviceStates[endpoint] = 'on';
-      // }
+      if (running) {
+        this.deviceStates[endpoint] = 'on';
+      }
     })
+    this.socket.on('dashboard-timer-created', timer => {
+      // Only add if it doesn't already exist (avoid duplicates)
+      if (!this.timers.some(t => t.id === timer.id)) {
+        timer.inputMinutes = timer.minutes || '';
+        this.timers.push(timer);
+      }
+    });
 
-    // Init composable for timers
-    const {
-      timerStates,
-      timerDisplays,
-      startTimer,
-      addToTimer,
-      cancelTimer
-    } = useDeviceTimers({
-      socket: this.socket,
-      fetchTimerStatus: this.fetchTimerStatus,
-      getApiRoute: this.getApiRoute
-    })
-    this.timerStates = timerStates
-    this.timerDisplays = timerDisplays
-    this.startTimer = startTimer
-    this.addToTimer = addToTimer
-    this.cancelTimer = cancelTimer
+    // --- Dashboard Timer Real-time Listeners ---
+    this.socket.on('dashboard-timer-updated', async (updated) => {
+      const idx = this.timers.findIndex(t => t.id === updated.id);
+      if (idx !== -1) {
+        this.timers[idx] = { ...this.timers[idx], ...updated };
+        // Set inputMinutes to latest minutes if present
+        if (typeof updated.minutes !== 'undefined') {
+          this.timers[idx].inputMinutes = updated.minutes;
+        }
+      }
+      if (updated.action === 'lapsed' && this.showTimerHistory) {
+        await this.loadDashboardTimerHistory();
+      }
+    });
 
-    // Devices
-    try {
-      await this.loadDevices()
-      Object.keys(this.groupedDevices).forEach(type => {
-        this.openGroups[type] = true
+    this.socket.on('dashboard-timer-removed', async ({ id }) => {
+      this.removeActiveDashboardTimerById(id)
+        if (this.showTimerHistory) await this.loadDashboardTimerHistory();
+      // this.timers = this.timers.filter(t => t.id !== id);
+    });
+
+
+    // --- Initial fetch for device states and timer states ---
+    await Promise.all(
+      this.devices.map(async device => {
+        await this.fetchStatus(device)
+        if (device.type === 'tasmota') {
+          await this.fetchTasmotaTimerStatus(device)
+        }
       })
+    )
 
-      // --- Fetch state and timer for each device ---
-      await Promise.all(
-        this.devices.map(async device => {
-          await this.fetchStatus(device)
-          await this.fetchTimerStatus(device)
-        })
-      )
-    } catch (err) {
-      console.error('Error during startup:', err)
-    } finally {
-      this.loadingDevices = false
-    }
+    this.loadingDevices = false
+  },
+
+  // And in your `beforeUnmount` (or `beforeDestroy` for Vue 2)
+  beforeUnmount() {
+    if (this.dashboardTimerPoll) clearInterval(this.dashboardTimerPoll);
+    if (this.tasmotaTimerPoll) clearInterval(this.tasmotaTimerPoll);
+  },
+
+  beforeUnmount() {
+    if (this.dashboardTimerPoll) clearInterval(this.dashboardTimerPoll);
   },
   methods: {
-    toggleTheme() {
-      this.theme = this.theme === 'light' ? 'dark' : 'light'
-      document.body.classList.toggle('dark-mode', this.theme === 'dark')
-      document.getElementById('app')?.classList.remove('light', 'dark')
-      document.getElementById('app')?.classList.add(this.theme)
-      localStorage.setItem('theme', this.theme)
-    },
-    formatType(type) {
-      switch (type) {
-        case 'tasmota': return 'Tasmota Devices'
-        case 'govee':   return 'Govee Devices'
-        default:        return type.charAt(0).toUpperCase() + type.slice(1)
+    async fetchTasmotaTimerStatus(device) {
+      const url = device.example === true
+        ? `/api/example/${device.endpoint}/timer/status`
+        : `/api/${device.endpoint}/timer/status`;
+
+      try {
+        const res = await fetch(url);
+        const jsn = await res.json();
+        // Accept remainingMs or remaining
+        const remaining = jsn.remainingMs
+          ? Math.floor(jsn.remainingMs / 1000)
+          : (typeof jsn.remaining === 'number' ? jsn.remaining : 0);
+        const display = this.formatDisplay(remaining);
+
+        this.timerStates[device.endpoint] = {
+          running: !!jsn.running,
+          remaining,
+          display,
+          endTime: jsn.endTime || null,
+          power: jsn.power || null
+        };
+        this.timerDisplays[device.endpoint] = display; // <- Ensure your card gets the updated display!
+      } catch (e) {
+        this.timerStates[device.endpoint] = {
+          running: false,
+          remaining: 0,
+          display: '0:00'
+        };
+        this.timerDisplays[device.endpoint] = '0:00';
       }
     },
-    toggleGroup(type) {
-      this.openGroups[type] = !this.openGroups[type]
+    // ----------- DASHBOARD TIMER (NEW) LOGIC -----------
+
+    formatDate(date) {
+      if (!date) return '';
+      return new Date(date).toLocaleString();
     },
-    scrollToGroup(type) {
-      const el = this.$refs[`group-${type}`]?.[0]
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+    async showHistory() {
+      await this.loadDashboardTimerHistory();
+      this.showTimerHistory = !this.showTimerHistory;
     },
-    getApiRoute(device, action) {
+
+
+    async loadDashboardTimers() {
+      const res = await fetch(`${base}api/timers`);
+      this.timers = await res.json();
+    },
+    async loadDashboardTimerHistory() {
+      const res = await fetch(`${base}api/timers/history`);
+      this.timerHistory = await res.json();
+    },
+
+    async addDashboardTimer({ name, minutes }) {
+      // POST /api/timers
+      const res = await fetch(`${base}api/timers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, minutes })
+      });
+      this.showTimerForm = false;
+    },
+    async startDashboardTimer(timer, minutes) {
+      // POST /api/timers/:id/start
+      await fetch(`${base}api/timers/${timer.id}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minutes })
+      });
+      await this.updateDashboardTimer(timer.id);
+    },
+    async addToDashboardTimer(timer, minutes) {
+      await this.startDashboardTimer(timer, minutes);
+      await this.updateDashboardTimer(timer.id);
+    },
+    async cancelDashboardTimer(timer) {
+      // POST /api/timers/:id/cancel
+      await fetch(`${base}api/timers/${timer.id}/cancel`, { method: 'POST' });
+      this.removeActiveDashboardTimerById(timer.id);
+      // this.timers = this.timers.filter(t => t.id !== timer.id);
+      await this.loadDashboardTimerHistory();
+    },
+    async fetchDashboardTimerStatus(timer) {
+      const res = await fetch(`${base}api/timers/${timer.id}/status`);
+      const jsn = await res.json();
+
+      timer.running = jsn.running;
+      timer.remaining = jsn.remaining;
+      timer.display = this.formatDisplay(jsn.remaining);
+      timer.endTime = jsn.endTime;
+
+      // REMOVE TIMER IF LAPSED
+      if (!timer.running && timer.remaining === 0) {
+        console.log("timer lapsed")
+        // Remove from active timers
+        this.removeActiveDashboardTimerById(timer.id);
+        // this.timers = this.timers.filter(t => t.id !== timer.id);
+        // (Optional) reload history
+        await this.loadDashboardTimerHistory?.();
+      }
+    },
+    async updateDashboardTimer(id) {
+      const res = await fetch(`${base}api/timers/${id}/status`);
+      const updated = await res.json();
+      const idx = this.timers.findIndex(t => t.id === id);
+      if (idx !== -1) this.timers[idx] = { ...this.timers[idx], ...updated };
+    },
+
+    removeActiveDashboardTimerById(id) {
+      this.timers = this.timers.filter(t => t.id !== id);
+    },
+
+    // ----------- TASMOTA/DEVICE LOGIC (Original) -----------
+    async startDeviceTimer(device, minutes) {
+      const url = this.getApiRoute(device, 'timer')
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minutes })
+      })
+      await this.fetchDeviceTimerStatus(device)
+    },
+    async addToDeviceTimer(device, minutes) {
+      await this.startDeviceTimer(device, minutes)
+      await this.fetchDeviceTimerStatus(device)
+    },
+    async cancelDeviceTimer(device) {
+      // Cancel = POST with minutes: 0
+      const url = this.getApiRoute(device, 'timer')
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minutes: 0 })
+      })
+      await this.fetchDeviceTimerStatus(device)
+    },
+    async fetchDeviceTimerStatus(device) {
+      let url
       if (device.example === true) {
-        if (device.type === 'govee') {
-          return `${base}api/example/govee/${device.endpoint}/${action}`
+        url = `/api/example/${device.endpoint}/timer/status`
+      } else {
+        url = `/api/${device.endpoint}/timer/status`
+      }
+      try {
+        const res = await fetch(url)
+        const jsn = await res.json()
+        this.timerStates[device.endpoint] = {
+          running: !!jsn.running,
+          endTime: jsn.endTime || (jsn.running ? Date.now() + (jsn.remainingMs || 0) : null),
+          power: jsn.power || null,
         }
-        return `${base}api/example/${device.endpoint}/${action}`
+        if (jsn.running) {
+          this.deviceStates[device.endpoint] = 'on'
+        }
+      } catch {
+        // fallback (do not mutate timerStates)
       }
-      if (device.type === 'govee') {
-        return `${base}api/govee/${device.endpoint}/${action}`
-      }
-      return `${base}api/${device.endpoint}/${action}`
     },
+
+    // ------------- SHARED / UI -------------
     async loadDevices() {
       const res = await fetch(`${base}api/devices`, { cache: 'no-store' })
       const map = await res.json()
@@ -238,167 +465,69 @@ export default {
           label:    v.label || k
         }))
     },
-    async fetchStatus(device) {
-      const url = this.getApiRoute(device, 'status')
-      try {
-        const res = await fetch(url)
-        const jsn = await res.json()
-        this.deviceStates[device.endpoint] =
-          jsn?.Status?.Power === true || jsn?.Status?.Power === 'on' ? 'on' : 'off'
-      } catch {
-        this.deviceStates[device.endpoint] = 'off'
+    formatDisplay(sec) {
+      const min = Math.floor(sec / 60);
+      const s = sec % 60;
+      return `${min}:${s.toString().padStart(2, '0')}`;
+    },
+    toggleTheme() {
+      this.theme = this.theme === 'light' ? 'dark' : 'light';
+      document.body.classList.toggle('dark-mode', this.theme === 'dark');
+      document.getElementById('app')?.classList.remove('light', 'dark');
+      document.getElementById('app')?.classList.add(this.theme);
+      localStorage.setItem('theme', this.theme);
+    },
+    formatType(type) {
+      switch (type) {
+        case 'tasmota': return 'Tasmota Devices';
+        case 'govee':   return 'Govee Devices';
+        default:        return type.charAt(0).toUpperCase() + type.slice(1);
       }
     },
-    async fetchTimerStatus(device) {
-      let url
+    toggleGroup(type) {
+      this.openGroups[type] = !this.openGroups[type];
+    },
+    scrollToGroup(type) {
+      const el = this.$refs[`group-${type}`]?.[0];
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+    getApiRoute(device, action) {
       if (device.example === true) {
-        url = `${base}api/example/${device.endpoint}/timer/status`
-      } else {
-        url = `${base}api/${device.endpoint}/timer/status`
-      }
-      try {
-        const res = await fetch(url)
-        const jsn = await res.json()
-        this.timerStates[device.endpoint] = {
-          running: !!jsn.running,
-          endTime: jsn.endTime || (jsn.running ? Date.now() + (jsn.remainingMs || 0) : null),
-          power: jsn.power || null,
+        if (device.type === 'govee') {
+          return `${base}api/example/govee/${device.endpoint}/${action}`;
         }
+        if (device.type === 'tasmota') {
+          return `${base}api/example/${device.endpoint}/${action}`;
+        }
+        return `${base}api/example/${device.endpoint}/${action}`;
+      }
+
+      if (device.type === 'govee') {
+        return `${base}api/govee/${device.endpoint}/${action}`;
+      }
+      if (device.type === 'tasmota') {
+        return `${base}api/example/${device.endpoint}/${action}`;
+      }
+      return `${base}api/${device.endpoint}/${action}`;
+    },
+    async fetchStatus(device) {
+      const url = this.getApiRoute(device, 'status');
+      try {
+        const res = await fetch(url);
+        const jsn = await res.json();
+        this.deviceStates[device.endpoint] =
+          jsn?.Status?.Power === true || jsn?.Status?.Power === 'on' ? 'on' : 'off';
       } catch {
-        // fallback (do not mutate timerStates)
+        this.deviceStates[device.endpoint] = 'off';
       }
     },
     getCardComponent(device) {
       switch (device.type) {
-        case 'tasmota': return 'TasmotaCard'
-        case 'govee':   return 'GoveeCard'
-        default:        return 'TasmotaCard'
+        case 'tasmota': return 'TasmotaCard';
+        case 'govee':   return 'GoveeCard';
+        default:        return 'TasmotaCard';
       }
-    },
+    }
   }
 }
 </script>
-
-<style>
-
-body,
-#app {
-  transition: background-color 300ms, color 300ms;
-  background-color: #fff;
-  color: #222;
-}
-body.dark-mode,
-#app.dark {
-  background-color: #121212;
-  color: #e0e0e0;
-}
-
-html { scroll-behavior: smooth; }
-
-input.form-control {
-  transition: background-color 300ms, color 300ms, border-color 300ms;
-}
-
-.sticky-nav {
-  position: sticky;
-  top: 0;
-  background: var(--bs-body-bg);
-  z-index: 100;
-  padding-top: 1rem;
-  padding-bottom: 1rem;
-}
-
-.card {
-  transition: background-color 300ms, color 300ms, border-color 300ms;
-}
-@media (max-width: 419px) {
-  .card {
-    padding: 0em;
-  }
-  .timer-btn-text {
-    padding: 0 2px;
-  }
-}
-@media (min-width: 420px) and (max-width: 479px) {
-  .card {
-    padding: 0.5em;
-  }
-  .timer-btn-text {
-    padding: 0 3px;
-  }
-}
-@media (min-width: 480px) and (max-width: 540px) {
-  .card {
-    padding: 1em;
-  }
-  .timer-btn-text {
-    padding: 0 4px;
-  }
-}
-@media (min-width: 541px) {
-  .timer-btn-text {
-    padding: 0 6px;
-  }
-}
-
-.dark-mode {
-  --bs-body-bg: #121212;
-  --bs-body-color: #e0e0e0;
-  background-color: var(--bs-body-bg);
-  color: var(--bs-body-color);
-  transition: background-color 300ms, color 300ms;
-}
-.dark-mode .card {
-  background-color: #1e1e1e;
-  border-color: #333;
-  /* transition: background-color 300ms, border-color 300ms; */
-}
-.dark-mode .nav-tabs .nav-link {
-  color: #ccc;
-  transition: color 300ms, background-color 300ms;
-}
-.dark-mode .nav-tabs .nav-link.active {
-  background-color: #333;
-}
-
-body, html, nav.sticky-nav, .card, .card-header, .btn, .nav-tabs .nav-link, .form-switch .form-check-input, .form-check-input::before {
-  transition: background-color 300ms, color 300ms, border-color 300ms, transform 300ms;
-}
-
-/* Dark mode switch overrides */
-
-.dark-mode .card-header {
-  background-color: #444;
-  transition: background-color 300ms;
-}
-
-.dark-mode .card-title {
-  color: #ffe082;
-  transition: color 300ms;
-}
-
-.dark-mode .form-switch .form-check-input {
-  background-color: #444;
-  border-color: #555;
-  
-}
-
-.dark-mode .form-switch .form-check-input::before {
-  background-color: #fff;  
-}
-
-.dark-mode .form-switch .form-check-input:checked {
-  background-color: #666;  
-}
-
-.dark-mode .form-switch .form-check-input:focus {
-  box-shadow: 0 0 0 .25rem rgba(255,255,255,0.25); 
-}
-
-.dark-mode input.form-control {
-  background-color: #e0e0e0;
-  color: #0e0e0e;
-  border-color: #444;
-}
-
-</style>

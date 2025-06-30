@@ -30,4 +30,9 @@ dist-ssr
 *.sln
 *.sw?
 
+# Docker build state (safe to ignore, always machine-specific)
+.docker/
+
+
 my_notes.txt
+build_images.sh
