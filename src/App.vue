@@ -8,6 +8,8 @@
       </button>
     </div>
 
+    <DeviceRegistration />
+
     <div v-if="isExampleFile" class="alert alert-warning">
       <i class="bi bi-exclamation-triangle"></i>
       {{ exampleInfo }}
@@ -49,6 +51,7 @@
           </span>
         </div>
 
+
         <div v-show="openGroups[type]" class="card-body">
           <!-- Timers group (dashboard timers only, uses new logic) -->
           <template v-if="type === 'timers'">
@@ -74,10 +77,13 @@
               <div v-for="timer in timers" :key="timer.id" class="col">
                 <TimerCard
                   :timer="timer"
+                  :contacts="contacts"
                   @start="min => startDashboardTimer(timer, min)"
                   @add="min => addToDashboardTimer(timer, min)"
                   @cancel="() => cancelDashboardTimer(timer)"
+                  @update-recipients="recips => updateTimerRecipients(timer, recips)"
                 />
+
               </div>
             </div>
             <div v-if="showTimerHistory" class="mb-4">
@@ -142,14 +148,16 @@ import GoveeCard from './components/GoveeCard.vue'
 import TimerCard from './components/TimerCard.vue'
 import TimerCreateForm from './components/TimerCreateForm.vue'
 import { setDevtoolsHook } from 'vue'
+import DeviceRegistration from './components/DeviceRegistration.vue'
 
 const base = import.meta.env.BASE_URL
 
 export default {
   name: 'App',
-  components: { TimerCard, TimerCreateForm, TasmotaCard, GoveeCard },
+  components: { TimerCard, TimerCreateForm, TasmotaCard, GoveeCard, DeviceRegistration },
   data() {
     return {
+      contacts: [],
       loadingDevices: true,
       devices: [],
       deviceStates: {},
@@ -187,6 +195,12 @@ export default {
     },
   },
   async mounted() {
+
+    // Load all contacts for RecipientsSelector
+    const res = await fetch(`${base}api/contacts`);
+    this.contacts = await res.json();
+
+
     // --- Devices First ---
     await this.loadDevices();
     Object.keys(this.groupedDevices).forEach(type => {
@@ -224,6 +238,15 @@ export default {
       path: '/socket.io',
       transports: ['websocket', 'polling']
     })
+
+    this.socket.on('contact-registered', async (newContact) => {
+      // Re-fetch contacts (safer, avoids dupes and sync issues)
+      const res = await fetch(`${base}api/contacts`);
+      this.contacts = await res.json();
+      // Optionall show a toast/snackbar: `${newContact.name} registered!`
+    });
+
+
     this.socket.on('connect', () => console.log('[WS] Connected'))
     this.socket.on('device-status', ({ endpoint, state }) => {
       this.deviceStates[endpoint] = state
@@ -240,7 +263,7 @@ export default {
     this.socket.on('dashboard-timer-created', timer => {
       // Only add if it doesn't already exist (avoid duplicates)
       if (!this.timers.some(t => t.id === timer.id)) {
-        timer.inputMinutes = timer.minutes || '';
+        timer.display = this.formatDisplay(timer.remaining); // <- Add this line
         this.timers.push(timer);
       }
     });
@@ -249,7 +272,11 @@ export default {
     this.socket.on('dashboard-timer-updated', async (updated) => {
       const idx = this.timers.findIndex(t => t.id === updated.id);
       if (idx !== -1) {
-        this.timers[idx] = { ...this.timers[idx], ...updated };
+        this.timers[idx] = { 
+          ...this.timers[idx], 
+          ...updated,
+        display: this.formatDisplay(updated.remaining),
+        inputMinutes: null };
         // Set inputMinutes to latest minutes if present
         if (typeof updated.minutes !== 'undefined') {
           this.timers[idx].inputMinutes = updated.minutes;
@@ -290,6 +317,14 @@ export default {
     if (this.dashboardTimerPoll) clearInterval(this.dashboardTimerPoll);
   },
   methods: {
+    async updateTimerRecipients(timer, recipients) {
+      await fetch(`${base}api/timers/${timer.id}/recipients`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipients: Array.isArray(recipients) ? recipients : [recipients] })
+      });
+      timer.recipients = recipients;
+    },
     async fetchTasmotaTimerStatus(device) {
       const url = device.example === true
         ? `/api/example/${device.endpoint}/timer/status`
@@ -336,22 +371,35 @@ export default {
 
     async loadDashboardTimers() {
       const res = await fetch(`${base}api/timers`);
-      this.timers = await res.json();
+      const timers = await res.json();
+      // Ensure each timer has recipients
+      this.timers = timers.map(t => ({
+        ...t,
+        recipients: Array.isArray(t.recipients) ? t.recipients : []
+      }));
     },
     async loadDashboardTimerHistory() {
       const res = await fetch(`${base}api/timers/history`);
       this.timerHistory = await res.json();
     },
 
-    async addDashboardTimer({ name, minutes }) {
+    async addDashboardTimer({ name, minutes, recipients = [] }) {
       // POST /api/timers
       const res = await fetch(`${base}api/timers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, minutes })
+        body: JSON.stringify({ name, minutes, recipients })
       });
+      const timer = await res.json();
+      // Defensive: ensure recipients is always an array
+      if (!Array.isArray(timer.recipients)) timer.recipients = [];
+      // Defensive: set timer.display for UI
+      timer.display = this.formatDisplay(timer.remaining);
+
+      // Do not push timer; rely on socket.io for real-time update
       this.showTimerForm = false;
     },
+
     async startDashboardTimer(timer, minutes) {
       // POST /api/timers/:id/start
       await fetch(`${base}api/timers/${timer.id}/start`, {
@@ -359,35 +407,34 @@ export default {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ minutes })
       });
-      await this.updateDashboardTimer(timer.id);
+      timer.remaining = minutes * 60;
+      timer.display = this.formatDisplay(timer.remaining);
+      timer.inputMinutes = null; // Clear input field
+      // Let socket event update timers list
+      // await this.updateDashboardTimer(timer.id);
     },
     async addToDashboardTimer(timer, minutes) {
       await this.startDashboardTimer(timer, minutes);
-      await this.updateDashboardTimer(timer.id);
+      // await this.updateDashboardTimer(timer.id);
     },
     async cancelDashboardTimer(timer) {
       // POST /api/timers/:id/cancel
       await fetch(`${base}api/timers/${timer.id}/cancel`, { method: 'POST' });
-      this.removeActiveDashboardTimerById(timer.id);
-      // this.timers = this.timers.filter(t => t.id !== timer.id);
+      // Let socket event remove timer, do not remove locally
+      // this.removeActiveDashboardTimerById(timer.id);
       await this.loadDashboardTimerHistory();
     },
     async fetchDashboardTimerStatus(timer) {
       const res = await fetch(`${base}api/timers/${timer.id}/status`);
       const jsn = await res.json();
 
-      timer.running = jsn.running;
-      timer.remaining = jsn.remaining;
-      timer.display = this.formatDisplay(jsn.remaining);
-      timer.endTime = jsn.endTime;
+      // Update timer object with all properties from backend, including recipients
+      Object.assign(timer, jsn);
+      timer.display = this.formatDisplay(timer.remaining);
 
       // REMOVE TIMER IF LAPSED
       if (!timer.running && timer.remaining === 0) {
-        console.log("timer lapsed")
-        // Remove from active timers
         this.removeActiveDashboardTimerById(timer.id);
-        // this.timers = this.timers.filter(t => t.id !== timer.id);
-        // (Optional) reload history
         await this.loadDashboardTimerHistory?.();
       }
     },
@@ -395,7 +442,10 @@ export default {
       const res = await fetch(`${base}api/timers/${id}/status`);
       const updated = await res.json();
       const idx = this.timers.findIndex(t => t.id === id);
-      if (idx !== -1) this.timers[idx] = { ...this.timers[idx], ...updated };
+      if (idx !== -1) {
+        this.timers[idx] = { ...this.timers[idx], ...updated };
+        this.timers[idx].display = this.formatDisplay(this.timers[idx].remaining); // <-- ADD THIS LINE
+      }
     },
 
     removeActiveDashboardTimerById(id) {

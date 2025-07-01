@@ -1,13 +1,14 @@
-require('./verify-devices');
+// ───── Initial Setup & Imports ─────
+require('./src/api/verify-devices');
 require('dotenv').config();
 
-const express = require('express');
-const http    = require('http');
-const path    = require('path');
-const fs      = require('fs');
-const mqtt    = require('mqtt');
+const express  = require('express');
+const http     = require('http');
+const path     = require('path');
+const fs       = require('fs');
+const mqtt     = require('mqtt');
 const { Server } = require('socket.io');
-const fetch   = (...args) => import('node-fetch').then(({default: f}) => f(...args));
+const fetch    = (...args) => import('node-fetch').then(({default: f}) => f(...args));
 
 // ───── Config & Helpers ─────
 
@@ -17,10 +18,20 @@ const io     = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.json());
 
-// ---- Base path config ----
-const basePath = process.env.BASE_PATH || '/';
-const normalizedBase = basePath.endsWith('/') ? basePath : basePath + '/';
+// Web Push setup (for push notifications)
+const webpush = require('web-push');
+webpush.setVapidDetails(
+  'mailto:you@example.com',
+  process.env.VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY
+);
 
+// Expose VAPID public key to the frontend
+app.get('/api/vapid-public-key', (req, res) => {
+  res.type('text/plain').send(process.env.VAPID_PUBLIC_KEY);
+});
+
+// Logging helper (show only in dev unless forced)
 function devLog(...args) {
   if (
     process.env.NODE_ENV !== 'production' ||
@@ -30,10 +41,17 @@ function devLog(...args) {
   }
 }
 
+// ---- Base path config ----
+const basePath        = process.env.BASE_PATH || '/';
+const normalizedBase  = basePath.endsWith('/') ? basePath : basePath + '/';
+
+// ───── Device Map & Loading ─────
+
 const DEVICES_PATH = path.join(__dirname, 'public', 'devices.json');
 console.log('Loading devices from:', DEVICES_PATH);
+
 function loadDevices() {
-  // Loads the devices.json file and attaches endpoint and label to each device.
+  // Loads devices.json and attaches endpoint and label
   const raw = JSON.parse(fs.readFileSync(DEVICES_PATH, 'utf8'));
   const devices = {};
   Object.entries(raw).forEach(([key, val]) => {
@@ -48,8 +66,7 @@ function loadDevices() {
   return devices;
 }
 
-// Cached devices, refreshed only on startup for now.
-let deviceMap = loadDevices();
+let deviceMap = loadDevices(); // Cached at startup
 fs.watchFile(DEVICES_PATH, () => {
   devLog('[Devices] Reloading device map...');
   deviceMap = loadDevices();
@@ -63,24 +80,7 @@ function isDemo(device) {
   return !!device && device.example === true;
 }
 
-// ───── Demo/Example Logic ─────
-
-const demoState = {};     // In-memory state for all example devices
-const demoTimers = {};    // In-memory timer state for demo devices
-
-function getDemoStatus(device) {
-  // Return a mock status payload
-  return { Status: { Power: demoState[device.endpoint] || 'off' } };
-}
-
-// Helper to emit WS status for demo devices
-function emitDemoStatus(device, state) {
-  demoState[device.endpoint] = state;
-  console.log(`[SOCKET EMIT] device-status for`, device.endpoint, state);
-  io.emit('device-status', { endpoint: device.endpoint, state });
-}
-
-// ───── MQTT Bridge (real devices only) ─────
+// ───── MQTT Bridge (for Real Devices) ─────
 
 const MQTT_URL = process.env.MQTT_URL || 'mqtt://localhost:1883';
 const mqttClient = mqtt.connect(MQTT_URL, {
@@ -119,50 +119,68 @@ mqttClient.on('message', (topic, payload) => {
   }
 });
 
-// ───── API Routes ─────
+// ───── Timer & Contacts API Routes ─────
 
-// const router = express.Router();
-// const timerApi = require('./timer-api')(io);
-// app.use('/api/timers', timerApi);
-const router = express.Router();
-const timerApi = require('./timer-api')(io);
+const timerApi    = require('./src/api/timer-api')(io);
+const contactsApi = require('./src/api/contacts-api')(io);
+const contacts    = require('./src/api/contacts-api').contacts;
+
 app.use('/api/timers', timerApi);
+app.use('/api/contacts', contactsApi);
 
-// --------- DEMO ROUTES ---------------
+// ───── Main Router: All Other Device, Demo, and Example Routes ─────
 
-// Device ON/OFF status endpoint for demo/example devices
+const router = express.Router();
+
+// ───── DEMO/EXAMPLE LOGIC (IN-MEMORY STATE) ─────
+
+const demoState    = {};     // Device ON/OFF states (for demo)
+const demoTimers   = {};     // Timers for demo devices
+const demoGoveeState = {};   // In-memory state for demo Govee devices
+
+function getDemoStatus(device) {
+  // Return a mock status payload
+  return { Status: { Power: demoState[device.endpoint] || 'off' } };
+}
+
+function emitDemoStatus(device, state) {
+  demoState[device.endpoint] = state;
+  console.log(`[SOCKET EMIT] device-status for`, device.endpoint, state);
+  io.emit('device-status', { endpoint: device.endpoint, state });
+}
+
+// ───── DEMO DEVICE ROUTES ─────
+
+// Device ON/OFF status endpoint for demo devices
 router.get('/example/:device/status', (req, res) => {
   const dev = getDevice(req.params.device);
   if (!dev || !isDemo(dev)) return res.status(404).json({ error: 'Unknown demo device' });
 
-  // Determine state (you might track ON/OFF with a variable or demoTimers logic)
-  // For example, if timer is running, state is ON. If not, OFF.
   const state = demoState[dev.endpoint] || 'off';
   res.json({ Status: { Power: state } });
 });
 
-// DEMO Timer endpoints
+// DEMO Timer endpoints (on/off/cancel logic)
 router.post('/example/:device/timer', (req, res) => {
   const { device } = req.params;
   const minutes = parseInt(req.body.minutes, 10);
   const dev = getDevice(device);
   if (!dev || !isDemo(dev)) return res.status(404).json({ error: 'Unknown demo device' });
 
-  // ALLOW 0 as cancel
   if (isNaN(minutes) || minutes < 0) {
     return res.status(400).json({ error: 'Invalid minutes' });
   }
 
+  // Cancel logic
   if (minutes === 0) {
     if (demoTimers[device]?.timeout) clearTimeout(demoTimers[device].timeout);
     delete demoTimers[device];
     emitDemoStatus(dev, 'off');
-    // --- Emit timer-update: stopped ---
     io.emit('timer-update', { device: dev.endpoint, running: false });
     return res.json({ success: true, cancelled: true });
   }
 
-  // Start new timer or add time
+  // Start new or add time
   let endTime;
   if (demoTimers[device] && demoTimers[device].endTime > Date.now()) {
     endTime = demoTimers[device].endTime + minutes * 60_000;
@@ -171,26 +189,22 @@ router.post('/example/:device/timer', (req, res) => {
     endTime = Date.now() + minutes * 60_000;
   }
 
-  // Turn on now
   emitDemoStatus(dev, 'on');
 
   const ms = endTime - Date.now();
   const timeout = setTimeout(() => {
     emitDemoStatus(dev, 'off');
     delete demoTimers[device];
-    // --- Emit timer-update: stopped (on timeout) ---
     io.emit('timer-update', { device: dev.endpoint, running: false });
   }, ms);
 
   demoTimers[device] = { endTime, timeout };
 
-  // --- Emit timer-update: started/added ---
   io.emit('timer-update', { device: dev.endpoint, endTime, running: true });
-
   res.json({ success: true, endTime });
 });
 
-// DEMO Timer status with power state
+// DEMO Timer status endpoint
 router.get('/example/:device/timer/status', (req, res) => {
   const t = demoTimers[req.params.device];
   const dev = getDevice(req.params.device);
@@ -202,8 +216,8 @@ router.get('/example/:device/timer/status', (req, res) => {
   res.json({ running: true, remainingMs: Math.max(0, t.endTime - Date.now()), power });
 });
 
+// DEMO generic actions: on/off/toggle/status
 const DEMO_ACTIONS = ['on', 'off', 'toggle', 'status'];
-
 router.all('/example/:device/:action', (req, res) => {
   const { device, action } = req.params;
   const dev = getDevice(device);
@@ -216,29 +230,22 @@ router.all('/example/:device/:action', (req, res) => {
     return res.json(getDemoStatus(dev));
   }
 
-  const act = action.toLowerCase();
-
   // Toggle/on/off logic
   let curr = demoState[dev.endpoint] || 'off';
   let newState;
-  if (act === 'toggle') {
+  if (action === 'toggle') {
     newState = curr === 'on' ? 'off' : 'on';
-  } else if (act === 'on') {
+  } else if (action === 'on') {
     newState = 'on';
-  } else if (act === 'off') {
+  } else if (action === 'off') {
     newState = 'off';
   }
-  console.log('Toggling:', { device, act, newState, dev });
-  console.log('emitDemoStatus call:', { endpoint: dev?.endpoint, newState });
   emitDemoStatus(dev, newState);
 
   return res.json({ success: true, state: newState });
 });
 
-// -------- DEMO Govee -----------
-
-// In-memory state for demo/example Govee devices
-const demoGoveeState = {};
+// ───── DEMO GOVEE ROUTES ─────
 
 // Demo Govee device ON/OFF/status
 router.all('/example/govee/:device/:action', (req, res) => {
@@ -248,14 +255,12 @@ router.all('/example/govee/:device/:action', (req, res) => {
     return res.status(404).json({ error: 'Unknown demo Govee device or action' });
   }
 
-  // Status
   if (action === 'status') {
     return res.json({
       Status: { Power: demoGoveeState[dev.endpoint] || 'off' }
     });
   }
 
-  // Toggle/on/off logic
   let curr = demoGoveeState[dev.endpoint] || 'off';
   let newState;
   if (action === 'toggle') {
@@ -267,21 +272,17 @@ router.all('/example/govee/:device/:action', (req, res) => {
   }
   demoGoveeState[dev.endpoint] = newState;
 
-  // Optional: emit status to websockets if you want demo Govee to show real-time updates
   io.emit('device-status', { endpoint: dev.endpoint, state: newState });
 
   return res.json({ success: true, state: newState });
 });
 
-// Optionally, a timer/status route for demo Govee devices (if your frontend expects it)
+// Demo Govee timer/status (expand as needed)
 router.get('/example/govee/:device/timer/status', (req, res) => {
-  // You can expand with timer logic if needed
   res.json({ running: false, power: demoGoveeState[req.params.device] || 'off' });
 });
 
-
-
-// -------- REAL DEVICE ROUTES --------
+// ───── REAL DEVICE ROUTES (TASMOTA & GOVEE) ─────
 
 const commandMap = {
   toggle: 'POWER TOGGLE',
@@ -290,6 +291,7 @@ const commandMap = {
   status: 'STATUS 0',
 };
 
+// Govee control endpoint (real device)
 router.post('/govee/:name/:action', async (req, res) => {
   const { name, action } = req.params;
   const device = Object.values(deviceMap).find(d =>
@@ -327,7 +329,7 @@ router.post('/:device/timer', async (req, res) => {
 
   const cmdUrl = cmd => `http://${dev.ip}/cm?cmnd=${encodeURIComponent(cmd)}`;
 
-  // Handle cancel case
+  // Cancel logic
   if (minutes === 0) {
     if (timers[device]?.timeout) clearTimeout(timers[device].timeout);
     delete timers[device];
@@ -370,7 +372,7 @@ router.post('/:device/timer', async (req, res) => {
   }
 });
 
-// Timer status with power state
+// Timer status for real device
 router.get('/:device/timer/status', (req, res) => {
   const t = timers[req.params.device];
   const dev = getDevice(req.params.device);
@@ -382,7 +384,7 @@ router.get('/:device/timer/status', (req, res) => {
   res.json({ running: true, remainingMs: Math.max(0, t.endTime - Date.now()), power });
 });
 
-// Generic Tasmota proxy (real devices)
+// Generic proxy (on/off/toggle/status) for Tasmota
 router.all('/:device/:action', async (req, res) => {
   const { device, action } = req.params;
   const dev    = getDevice(device);
@@ -408,9 +410,8 @@ router.all('/:device/:action', async (req, res) => {
   }
 });
 
-// Devices list (same as before, but only verified devices)
+// Devices list endpoint (only verified devices)
 router.get('/devices', (req, res) => {
-  // Re-read in case the file changed
   try {
     res.json(JSON.parse(fs.readFileSync(DEVICES_PATH, 'utf8')));
   } catch (e) {
@@ -418,15 +419,15 @@ router.get('/devices', (req, res) => {
   }
 });
 
-// Mount API routes at basePath
+// Mount all API routes at basePath
 app.use(normalizedBase + 'api', router);
 
-// ───── Static & SPA Fallback ─────
+// ───── Static File Serving & SPA Fallback ─────
 
-// Always serve static assets in /public at root (favicons, etc)
+// Serve static assets from /public at root (for favicon, etc)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve frontend from /<basePath>
+// Serve frontend (built SPA) from /<basePath>
 app.use(normalizedBase, express.static(path.join(__dirname, 'dist')));
 
 // SPA fallback: any GET under /<basePath>/* not matching a static file → index.html

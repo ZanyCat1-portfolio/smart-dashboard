@@ -4,7 +4,8 @@ const path     = require('path');
 const axios    = require('axios');
 const chokidar = require('chokidar');
 
-const DEVICES_FILE  = path.join(__dirname, 'public', 'devices.json');
+const DEVICES_FILE  = path.join(__dirname, '../../public', 'devices.json');
+console.log("dirname: ", __dirname)
 let  isWriting     = false;
 
 // load & save

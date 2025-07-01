@@ -15,6 +15,10 @@ dist-ssr
 # Env files
 .env
 .env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # Local/dev-only files
 *.local
@@ -22,17 +26,39 @@ dist-ssr
 # Editor & system files
 .vscode/*
 !.vscode/extensions.json
-.idea
+!.vscode/settings.json
+.idea/
 .DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-# Docker build state (safe to ignore, always machine-specific)
+# Test coverage
+coverage/
+*.lcov
+
+# Local database files
+*.sqlite
+*.sqlite3
+
+# Docker build state (safe to ignore)
 .docker/
 
+# Other build artifacts
+*.tgz
+*.zip
+*.tar
+*.gz
+*.rar
 
+# Project-specific files
 my_notes.txt
 build_images.sh
