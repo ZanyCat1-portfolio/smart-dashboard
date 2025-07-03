@@ -18,7 +18,7 @@
       <RecipientsSelector
         :contacts="contacts"
         :recipients="timer.recipients || []"
-        @change="onRecipientsChange"
+        @recipients-change="onRecipientsChange"
       />
     </template>
   </BaseDeviceCard>

@@ -6,20 +6,22 @@
     <div class="d-flex mb-2 gap-2">
       <select v-model="selectedContactId" class="form-select" style="max-width:200px;">
         <option disabled value="">Select Contact…</option>
-        <option v-for="c in contacts" :key="c.id" :value="c.id">{{ c.name }}</option>
+        <option v-for="contact in contacts" :key="contact.id" :value="contact.id">{{ contact.name }}</option>
       </select>
       <template v-if="selectedContact">
         <div>
-          <span v-for="d in selectedContact.devices" :key="d.id" class="form-check form-check-inline">
+          <span v-for="device in selectedContact.devices" :key="device.id" class="form-check form-check-inline">
             <input
               type="checkbox"
               class="form-check-input"
-              :id="'device-' + d.id"
-              v-model="selectedDeviceIds"
-              :value="d.id"
+              :id="'device-' + device.id"
+              :checked="isDeviceAlreadyAdded(selectedContact.id, device.id) || selectedDeviceIds.includes(device.id)"
+              :disabled="isDeviceAlreadyAdded(selectedContact.id, device.id)"
+              @change="onDeviceCheckboxChange(device.id, $event)"
             >
-            <label class="form-check-label" :for="'device-' + d.id">
-              {{ d.name || d.id }}
+            <label class="form-check-label" :for="'device-' + device.id">
+              {{ device.name || device.id }}
+              <span v-if="isDeviceAlreadyAdded(selectedContact.id, device.id)" class="text-muted" style="font-size:0.8em;">(already added)</span>
             </label>
           </span>
           <button class="btn btn-outline-success btn-sm ms-2"
@@ -36,7 +38,7 @@
         class="list-group-item"
       >
         <span>
-          <b>{{ recipient }}</b>:
+          <b>{{ recipient.contactName }}</b>:
           <span
             v-for="device in recipient.devices"
             :key="device.id"
@@ -73,82 +75,123 @@ export default {
   },
   computed: {
     selectedContact() {
-      return this.contacts.find(c => String(c.id) === String(this.selectedContactId));
+      return this.contacts.find(contact => String(contact.id) === String(this.selectedContactId));
     }
   },
   watch: {
     recipients: {
       immediate: true,
-      handler(newVal) {
-        this.localRecipients = Array.isArray(newVal) ? JSON.parse(JSON.stringify(newVal)) : [];
+      handler(newRecipients) {
+        this.localRecipients = Array.isArray(newRecipients) ? JSON.parse(JSON.stringify(newRecipients)) : [];
+        console.log('localRecipients updated', this.localRecipients);
       }
+    },
+    selectedContactId() {
+      this.syncSelectedDeviceIds();
     }
   },
   methods: {
-    
+    // Remove any devices from selection that are already added
+    syncSelectedDeviceIds() {
+      if (!this.selectedContact) {
+        this.selectedDeviceIds = [];
+        return;
+      }
+      this.selectedDeviceIds = this.selectedDeviceIds.filter(
+        deviceId => !this.isDeviceAlreadyAdded(this.selectedContact.id, deviceId)
+      );
+    },
+    // Checks if device is already added for this contact
+    isDeviceAlreadyAdded(contactId, deviceId) {
+      const recipient = this.localRecipients.find(
+        rec => String(rec.contactId) === String(contactId)
+      );
+      const isAlreadyAdded = recipient && recipient.devices.some(device => String(device.id) === String(deviceId));
+      console.log('isDeviceAlreadyAdded?', contactId, deviceId, '=>', isAlreadyAdded, recipient ? recipient.devices : 'NO RECIPIENT');
+      return isAlreadyAdded;
+    },
+    // Checkbox handler for device selection
+    onDeviceCheckboxChange(deviceId, event) {
+      if (event.target.checked) {
+        if (!this.selectedDeviceIds.includes(deviceId)) {
+          this.selectedDeviceIds.push(deviceId);
+        }
+      } else {
+        this.selectedDeviceIds = this.selectedDeviceIds.filter(id => id !== deviceId);
+      }
+    },
+    // Add the selected recipient and device(s)
     addRecipient() {
-      // Validate selection
       if (!this.selectedContactId || this.selectedDeviceIds.length === 0) return;
       const contact = this.selectedContact;
       if (!contact || !contact.id || !contact.name) {
         console.warn("No valid contact found for selectedContactId:", this.selectedContactId);
         return;
       }
-      const devices = contact.devices.filter(d => this.selectedDeviceIds.includes(d.id));
-      if (!devices.length) {
-        console.warn("No devices matched selectedDeviceIds:", this.selectedDeviceIds, "in contact:", contact);
-        return;
-      }
 
-      // Ensure all selected devices are valid (id and name at minimum)
-      const validDevices = devices.filter(d => d && d.id && d.name);
+      // Only include devices not already present
+      const selectedDevices = contact.devices.filter(
+        device => this.selectedDeviceIds.includes(device.id)
+      );
+      if (!selectedDevices.length) return;
 
-      // Defensive: Only add recipients with both contactId, contactName, and valid devices array
-      if (!validDevices.length) {
-        console.warn("No valid devices found for contact:", contact);
-        return;
-      }
+      // Only add valid devices
+      const validDevices = selectedDevices.filter(device => device && device.id && (device.name || device.id));
 
-      // Debug log for sanity
-      console.log("Adding recipient:", {
-        contactId: contact.id,
-        contactName: contact.name,
-        devices: validDevices.map(d => ({ ...d }))
-      });
-
-      // Prevent duplicates: update devices array for the contact if exists
-      const existing = this.localRecipients.find(r => r.contactId == contact.id);
-      if (existing) {
-        // Only add new devices
-        const newDevices = validDevices.filter(
-          d => !existing.devices.some(ed => String(ed.id) === String(d.id))
-        );
-        existing.devices = [...existing.devices, ...newDevices];
+      // Find or create recipient
+      let recipient = this.localRecipients.find(rec => rec.contactId == contact.id);
+      if (recipient) {
+        // Merge new devices, avoiding duplicates
+        const existingIds = new Set(recipient.devices.map(device => String(device.id)));
+        const newDevices = validDevices.filter(device => !existingIds.has(String(device.id)));
+        if (newDevices.length) {
+          recipient.devices = [...recipient.devices, ...newDevices];
+        }
       } else {
         this.localRecipients.push({
           contactId: contact.id,
           contactName: contact.name,
-          devices: validDevices.map(d => ({ ...d }))
+          devices: validDevices.map(device => ({ ...device }))
         });
       }
+
+      // Remove any duplicate recipient for this contactId, merging devices if needed
+      this.localRecipients = this.localRecipients.reduce((acc, recipientObj) => {
+        const found = acc.find(existing => existing.contactId === recipientObj.contactId);
+        if (!found) {
+          acc.push(recipientObj);
+        } else {
+          // Merge devices
+          const existingIds = new Set(found.devices.map(device => String(device.id)));
+          const mergedDevices = [
+            ...found.devices,
+            ...recipientObj.devices.filter(device => !existingIds.has(String(device.id)))
+          ];
+          found.devices = mergedDevices;
+        }
+        return acc;
+      }, []);
+
+      // Force reactivity
+      this.localRecipients = [...this.localRecipients];
 
       // Reset selections
       this.selectedContactId = '';
       this.selectedDeviceIds = [];
-      this.$emit('change', JSON.parse(JSON.stringify(this.localRecipients)));
+
+      console.log("Emitting recipients:", JSON.stringify(this.localRecipients, null, 2));
+      this.$emit('recipients-change', JSON.parse(JSON.stringify(this.localRecipients)));
     },
-
-
+    // Remove a device from a recipient
     removeDevice(contactId, deviceId) {
-      const idx = this.localRecipients.findIndex(r => r.contactId == contactId);
-      if (idx !== -1) {
-        // Remove the device from that contact's devices array
-        this.localRecipients[idx].devices = this.localRecipients[idx].devices.filter(
-          d => String(d.id) !== String(deviceId)
+      const recipientIndex = this.localRecipients.findIndex(recipient => recipient.contactId == contactId);
+      if (recipientIndex !== -1) {
+        this.localRecipients[recipientIndex].devices = this.localRecipients[recipientIndex].devices.filter(
+          device => String(device.id) !== String(deviceId)
         );
-        // If no devices left for the contact, remove the whole recipient entry
-        if (this.localRecipients[idx].devices.length === 0) {
-          this.localRecipients.splice(idx, 1);
+        // If no devices left, remove the recipient
+        if (this.localRecipients[recipientIndex].devices.length === 0) {
+          this.localRecipients.splice(recipientIndex, 1);
         }
         this.$emit('change', JSON.parse(JSON.stringify(this.localRecipients)));
       }

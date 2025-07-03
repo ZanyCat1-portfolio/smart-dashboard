@@ -8,7 +8,7 @@
       </button>
     </div>
 
-    <DeviceRegistration />
+    <DeviceRegistration @device-unregistered="onDeviceUnregistered" />
 
     <div v-if="isExampleFile" class="alert alert-warning">
       <i class="bi bi-exclamation-triangle"></i>
@@ -95,14 +95,14 @@
               </div>
               <div v-if="timerHistory.length === 0" class="mt-3 text-muted">No timer history yet.</div>
               <ul v-else class="list-group mt-3">
-                <li v-for="t in timerHistory" :key="t.id" class="list-group-item d-flex justify-content-between align-items-center">
+                <li v-for="timer in timerHistory" :key="timer.id" class="list-group-item d-flex justify-content-between align-items-center">
                   <span>
-                    <b>{{ t.name }}</b> 
-                    <span v-if="t.canceled" class="badge bg-warning text-dark ms-2">Canceled</span>
+                    <b>{{ timer.name }}</b> 
+                    <span v-if="timer.canceled" class="badge bg-warning text-dark ms-2">Canceled</span>
                     <span v-else class="badge bg-success ms-2">Completed</span>
                   </span>
                   <span>
-                    <span class="text-muted">{{ formatDate(t.lastAction || t.created) }}</span>
+                    <span class="text-muted">{{ formatDate(timer.lastAction || timer.created) }}</span>
                   </span>
                 </li>
               </ul>
@@ -176,15 +176,16 @@ export default {
   },
   computed: {
     groupedDevices() {
-      const groups = this.devices.reduce((acc, d) => {
-        (acc[d.type] = acc[d.type] || []).push(d)
-        return acc
+      const groups = this.devices.reduce((groups, device) => {
+        (groups[device.type] = groups[device.type] || []).push(device)
+        return groups
       }, {})
       for (const type in groups) {
         groups[type].sort((a, b) => a.label.localeCompare(b.label))
       }
       return { timers: this.timers, ...groups }
-    },
+    }
+,
     computedDeviceState() {
       return (endpoint) => {
         if (this.timerStates[endpoint]?.running === true) {
@@ -270,22 +271,23 @@ export default {
 
     // --- Dashboard Timer Real-time Listeners ---
     this.socket.on('dashboard-timer-updated', async (updated) => {
-      const idx = this.timers.findIndex(t => t.id === updated.id);
-      if (idx !== -1) {
-        this.timers[idx] = { 
-          ...this.timers[idx], 
+      const timerIndex = this.timers.findIndex(timer => timer.id === updated.id);
+      if (timerIndex !== -1) {
+        this.timers[timerIndex] = { 
+          ...this.timers[timerIndex], 
           ...updated,
-        display: this.formatDisplay(updated.remaining),
-        inputMinutes: null };
-        // Set inputMinutes to latest minutes if present
+          display: this.formatDisplay(updated.remaining),
+          inputMinutes: null
+        };
         if (typeof updated.minutes !== 'undefined') {
-          this.timers[idx].inputMinutes = updated.minutes;
+          this.timers[timerIndex].inputMinutes = updated.minutes;
         }
       }
       if (updated.action === 'lapsed' && this.showTimerHistory) {
         await this.loadDashboardTimerHistory();
       }
     });
+
 
     this.socket.on('dashboard-timer-removed', async ({ id }) => {
       this.removeActiveDashboardTimerById(id)
@@ -318,10 +320,15 @@ export default {
   },
   methods: {
     async updateTimerRecipients(timer, recipients) {
+      console.log("updateTimerRecipients called. Recipients:", recipients);
+
+      if (!Array.isArray(recipients)) {
+        throw new Error("Recipients payload is not an array!");
+      }
       await fetch(`${base}api/timers/${timer.id}/recipients`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipients: Array.isArray(recipients) ? recipients : [recipients] })
+        body: JSON.stringify({ recipients })
       });
       timer.recipients = recipients;
     },
@@ -332,19 +339,19 @@ export default {
 
       try {
         const res = await fetch(url);
-        const jsn = await res.json();
+        const statusJson = await res.json();
         // Accept remainingMs or remaining
-        const remaining = jsn.remainingMs
-          ? Math.floor(jsn.remainingMs / 1000)
-          : (typeof jsn.remaining === 'number' ? jsn.remaining : 0);
+        const remaining = statusJson.remainingMs
+          ? Math.floor(statusJson.remainingMs / 1000)
+          : (typeof statusJson.remaining === 'number' ? statusJson.remaining : 0);
         const display = this.formatDisplay(remaining);
 
         this.timerStates[device.endpoint] = {
-          running: !!jsn.running,
+          running: !!statusJson.running,
           remaining,
           display,
-          endTime: jsn.endTime || null,
-          power: jsn.power || null
+          endTime: statusJson.endTime || null,
+          power: statusJson.power || null
         };
         this.timerDisplays[device.endpoint] = display; // <- Ensure your card gets the updated display!
       } catch (e) {
@@ -362,27 +369,23 @@ export default {
       if (!date) return '';
       return new Date(date).toLocaleString();
     },
-
     async showHistory() {
       await this.loadDashboardTimerHistory();
       this.showTimerHistory = !this.showTimerHistory;
     },
-
-
     async loadDashboardTimers() {
       const res = await fetch(`${base}api/timers`);
       const timers = await res.json();
       // Ensure each timer has recipients
-      this.timers = timers.map(t => ({
-        ...t,
-        recipients: Array.isArray(t.recipients) ? t.recipients : []
+      this.timers = timers.map(timer => ({
+        ...timer,
+        recipients: Array.isArray(timer.recipients) ? timer.recipients : []
       }));
     },
     async loadDashboardTimerHistory() {
       const res = await fetch(`${base}api/timers/history`);
       this.timerHistory = await res.json();
     },
-
     async addDashboardTimer({ name, minutes, recipients = [] }) {
       // POST /api/timers
       const res = await fetch(`${base}api/timers`, {
@@ -407,49 +410,44 @@ export default {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ minutes })
       });
-      timer.remaining = minutes * 60;
-      timer.display = this.formatDisplay(timer.remaining);
-      timer.inputMinutes = null; // Clear input field
-      // Let socket event update timers list
-      // await this.updateDashboardTimer(timer.id);
+      // do we need for optimistic?
+      // timer.remaining = minutes * 60;
+      // timer.display = this.formatDisplay(timer.remaining);
+      // timer.inputMinutes = null; // Clear input field
     },
     async addToDashboardTimer(timer, minutes) {
       await this.startDashboardTimer(timer, minutes);
-      // await this.updateDashboardTimer(timer.id);
     },
     async cancelDashboardTimer(timer) {
       // POST /api/timers/:id/cancel
       await fetch(`${base}api/timers/${timer.id}/cancel`, { method: 'POST' });
-      // Let socket event remove timer, do not remove locally
-      // this.removeActiveDashboardTimerById(timer.id);
       await this.loadDashboardTimerHistory();
     },
     async fetchDashboardTimerStatus(timer) {
       const res = await fetch(`${base}api/timers/${timer.id}/status`);
-      const jsn = await res.json();
+      const statusJson = await res.json();
 
-      // Update timer object with all properties from backend, including recipients
-      Object.assign(timer, jsn);
+      Object.assign(timer, statusJson);
       timer.display = this.formatDisplay(timer.remaining);
 
-      // REMOVE TIMER IF LAPSED
       if (!timer.running && timer.remaining === 0) {
         this.removeActiveDashboardTimerById(timer.id);
         await this.loadDashboardTimerHistory?.();
       }
     },
-    async updateDashboardTimer(id) {
-      const res = await fetch(`${base}api/timers/${id}/status`);
-      const updated = await res.json();
-      const idx = this.timers.findIndex(t => t.id === id);
-      if (idx !== -1) {
-        this.timers[idx] = { ...this.timers[idx], ...updated };
-        this.timers[idx].display = this.formatDisplay(this.timers[idx].remaining); // <-- ADD THIS LINE
-      }
-    },
+    // Do we ever need this? In case of network blip?
+    // async updateDashboardTimer(timerId) {
+    //   const res = await fetch(`${base}api/timers/${timerId}/status`);
+    //   const updatedTimer = await res.json();
+    //   const timerIndex = this.timers.findIndex(timer => timer.id === timerId);
+    //   if (timerIndex !== -1) {
+    //     this.timers[timerIndex] = { ...this.timers[timerIndex], ...updatedTimer };
+    //     this.timers[timerIndex].display = this.formatDisplay(this.timers[timerIndex].remaining);
+    //   }
+    // },
 
-    removeActiveDashboardTimerById(id) {
-      this.timers = this.timers.filter(t => t.id !== id);
+    removeActiveDashboardTimerById(timerId) {
+      this.timers = this.timers.filter(timer => timer.id !== timerId);
     },
 
     // ----------- TASMOTA/DEVICE LOGIC (Original) -----------
@@ -485,13 +483,13 @@ export default {
       }
       try {
         const res = await fetch(url)
-        const jsn = await res.json()
+        const statusJson = await res.json()
         this.timerStates[device.endpoint] = {
-          running: !!jsn.running,
-          endTime: jsn.endTime || (jsn.running ? Date.now() + (jsn.remainingMs || 0) : null),
-          power: jsn.power || null,
+          running: !!statusJson.running,
+          endTime: statusJson.endTime || (statusJson.running ? Date.now() + (statusJson.remainingMs || 0) : null),
+          power: statusJson.power || null,
         }
-        if (jsn.running) {
+        if (statusJson.running) {
           this.deviceStates[device.endpoint] = 'on'
         }
       } catch {
@@ -508,11 +506,11 @@ export default {
         this.exampleInfo = map._meta.info;
       }
       this.devices = Object.entries(map)
-        .filter(([k, v]) => !k.startsWith('_') && v.verified)
-        .map(([k, v]) => ({
-          ...v,
-          endpoint: k.toLowerCase().replace(/\s+/g, ''),
-          label:    v.label || k
+        .filter(([key, device]) => !key.startsWith('_') && device.verified)
+        .map(([key, device]) => ({
+          ...device,
+          endpoint: key.toLowerCase().replace(/\s+/g, ''),
+          label: device.label || key
         }))
     },
     formatDisplay(sec) {
@@ -564,9 +562,9 @@ export default {
       const url = this.getApiRoute(device, 'status');
       try {
         const res = await fetch(url);
-        const jsn = await res.json();
+        const statusJson = await res.json();
         this.deviceStates[device.endpoint] =
-          jsn?.Status?.Power === true || jsn?.Status?.Power === 'on' ? 'on' : 'off';
+          statusJson?.Status?.Power === true || statusJson?.Status?.Power === 'on' ? 'on' : 'off';
       } catch {
         this.deviceStates[device.endpoint] = 'off';
       }
@@ -576,6 +574,45 @@ export default {
         case 'tasmota': return 'TasmotaCard';
         case 'govee':   return 'GoveeCard';
         default:        return 'TasmotaCard';
+      }
+    },
+    async fetchContacts() {
+      const res = await fetch(`${base}api/contacts`);
+      this.contacts = await res.json();
+    },
+    async onDeviceUnregistered() {
+      // 1. Reload contacts (refreshes RecipientsSelector etc)
+      await this.fetchContacts();
+
+      // 2. Remove unregistered device from all timer recipient lists
+      // We want to keep only recipients that still exist in the current contacts/devices list
+      const validDeviceIds = new Set();
+      for (const contact of this.contacts) {
+        for (const device of contact.devices) {
+          validDeviceIds.add(device.id);
+        }
+      }
+      for (const timer of this.timers) {
+        if (Array.isArray(timer.recipients)) {
+          timer.recipients = timer.recipients.filter(
+            id => validDeviceIds.has(id)
+          );
+        }
+      }
+
+      // 3. Optional: Clear UI selection/state related to removed device
+      // Example: If you have a selectedRecipientId or selectedDeviceId, unset it if it's no longer valid
+      if (this.selectedRecipientId && !validDeviceIds.has(this.selectedRecipientId)) {
+        this.selectedRecipientId = null;
+      }
+      // Add any similar state cleanup here (alerts, dropdowns, etc.)
+
+      // 4. Optional: Show a toast/message (if you use a toast system or fallback to alert)
+      if (this.$toast) {
+        this.$toast('Device successfully unregistered and removed from all recipients.');
+      } else {
+        // Simple fallback
+        alert('Device unregistered and removed from all recipients.');
       }
     }
   }

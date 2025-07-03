@@ -39,6 +39,38 @@ Run both the Vue frontend and Express backend together:
 - Frontend: http://localhost:5173
 - Backend/API: http://localhost:8080
 
+### HTTPS for Local Development
+
+Push notifications and service workers require HTTPS — but **only if you access the app from another device**.
+
+- **If you are only using your dev machine:**  
+  You do not need HTTPS. Browsers allow service workers and push notifications on `localhost` over plain HTTP.
+
+- **If you want to test from other devices on your LAN (phone, tablet, laptop):**  
+  You must run the dev server with HTTPS, using a self-signed certificate.
+
+To enable HTTPS for LAN testing:
+
+1. **Generate self-signed certificates** (`dev-key.pem` and `dev-cert.pem`) in a `cert/` folder at the project root.
+    - Example (with OpenSSL):
+
+          mkdir cert
+          openssl req -x509 -newkey rsa:4096 -nodes -out cert/dev-cert.pem -keyout cert/dev-key.pem -days 365 -subj "/CN=localhost"
+
+2. **Configure your dev server to use these certs** (see `vite.config.js`).
+
+3. **Accessing from another device on your LAN:**  
+   On **Android**, using **Firefox** browser, simply visit `https://<your-lan-ip>:<port>`.  
+   Firefox will show a certificate warning; you can accept the risk and continue.  
+   Service workers and push notifications will work.  
+   No need to install or trust the `.pem` file on your phone for Firefox.
+
+> **Note:**  
+> In my testing, only Firefox on Android worked for push notifications over LAN with a self-signed cert. Other browsers (including Chrome) may not support this or may require complex certificate installation, which did not work for me.
+
+If you don’t trust the cert, push notifications and service workers will not work from other devices, and you’ll see security errors.
+
+
 ### Build (production)
 
 Build the frontend:

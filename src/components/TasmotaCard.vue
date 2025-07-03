@@ -97,7 +97,7 @@ export default {
       timerMessage: '',
       timerMessageVisible: false,
       
-      _messageTimeout: null
+      messageTimeoutId: null
     }
   },
 
@@ -123,31 +123,31 @@ export default {
     // });
   },
   methods: {
-    async onOptimisticToggle(newValue) {
-      this.localSwitchOn = newValue
-      const action = newValue ? 'on' : 'off'
+    async onOptimisticToggle(newSwitchState) {
+      this.localSwitchOn = newSwitchState
+      const action = newSwitchState ? 'on' : 'off'
       const url = this.getApiRoute(this.device, action)
       await fetch(url, { method: 'POST' })
     },
     
     onTimerButton() {
-    if (this.isTimerRunning) {
-      this.onAddToTimer(this.timerMinutes)
-      this.showMessage(`Added: ${this.timerMinutes} minute${this.timerMinutes > 1 ? 's' : ''}`)
-    } else {
-      this.onStartTimer(this.timerMinutes)
-      this.showMessage(`Start: ${this.timerMinutes} minute${this.timerMinutes > 1 ? 's' : ''}`)
-    }
-    this.timerMinutes = null
-  },
-  cancelTimer() {
-    this.onCancelTimer()
-    this.showMessage('Timer cancelled')
-  },
+      if (this.isTimerRunning) {
+        this.onAddToTimer(this.timerMinutes)
+        this.showMessage(`Added: ${this.timerMinutes} minute${this.timerMinutes > 1 ? 's' : ''}`)
+      } else {
+        this.onStartTimer(this.timerMinutes)
+        this.showMessage(`Start: ${this.timerMinutes} minute${this.timerMinutes > 1 ? 's' : ''}`)
+      }
+      this.timerMinutes = null
+    },
+    cancelTimer() {
+      this.onCancelTimer()
+      this.showMessage('Timer cancelled')
+    },
     async checkTimerStatus() {
-      const url = this.getApiRoute(this.device, 'timer/status')
-      const res = await fetch(url)
-      const data = await res.json()
+      const url = this.getApiRoute(this.device, 'timer/status');
+      const response = await fetch(url);
+      const statusJson = await response.json();
     },
     formatCountdown(ms) {
       const total = Math.max(0, Math.floor(ms / 1000))
@@ -158,8 +158,8 @@ export default {
     showMessage(msg) {
       this.timerMessage = msg;
       this.timerMessageVisible = true;
-      if (this._messageTimeout) clearTimeout(this._messageTimeout);
-      this._messageTimeout = setTimeout(() => {
+      if (this.messageTimeoutId) clearTimeout(this.messageTimeoutId);
+      this.messageTimeoutId = setTimeout(() => {
         this.timerMessageVisible = false;
         setTimeout(() => {
           this.timerMessage = '';

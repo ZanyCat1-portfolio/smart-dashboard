@@ -38,7 +38,7 @@ async function sendOn() {
     const url = props.getApiRoute(props.device, 'on');
     await fetch(url, { method: 'POST' });
     actionMessage.value = 'Sent ON';
-  } catch (err) {
+  } catch (error) {
     actionMessage.value = 'Error sending ON';
   }
   actionLoading.value = false;
@@ -51,7 +51,7 @@ async function sendOff() {
     const url = props.getApiRoute(props.device, 'off');
     await fetch(url, { method: 'POST' });
     actionMessage.value = 'Sent OFF';
-  } catch (err) {
+  } catch (error) {
     actionMessage.value = 'Error sending OFF';
   }
   actionLoading.value = false;

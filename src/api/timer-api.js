@@ -1,7 +1,6 @@
 const express = require('express');
 // const { sendPushNotification } = require('./push');
 
-
 // In-memory storage (replace with DB for production)
 let nextTimerId = 1;
 const timers = {};          // { id: timerObj }
@@ -17,44 +16,63 @@ function serializeTimer(timer) {
   return safe;
 }
 
-
-// At top of timer-api.js
 const { contacts } = require('./contacts-api'); // or wherever your contacts live
 const webpush = require('web-push');
 
-// Async notifyRecipients
+// --- REMOVE DEVICE FROM ALL TIMER RECIPIENTS ---
+function removeDeviceFromRecipients(deviceId) {
+  for (const timerId in timers) {
+    const timer = timers[timerId];
+    if (Array.isArray(timer.recipients)) {
+      // Remove the device from each recipient.devices array
+      let changed = false;
+      timer.recipients = timer.recipients.map(recipient => {
+        if (!recipient || !recipient.devices) return recipient;
+        const before = recipient.devices.length;
+        recipient.devices = recipient.devices.filter(device => String(device.id) !== String(deviceId));
+        if (recipient.devices.length !== before) changed = true;
+        return recipient;
+      }).filter(recipient => recipient.devices && recipient.devices.length > 0);
+      if (changed) {
+        console.log(`[Recipients] Removed device ${deviceId} from timer ${timerId}`);
+      }
+    }
+  }
+}
+
 async function notifyRecipients(timer, message) {
+  // ...same as before...
   console.log('[NOTIFY]', { timer, message });
 
   if (!Array.isArray(timer.recipients)) return;
 
   // Filter to only valid recipient objects
-  const validRecipients = timer.recipients.filter(rec =>
-    rec && typeof rec.contactId !== 'undefined' && Array.isArray(rec.devices)
+  const validRecipients = timer.recipients.filter(recipient =>
+    recipient && typeof recipient.contactId !== 'undefined' && Array.isArray(recipient.devices)
   );
 
   if (validRecipients.length !== timer.recipients.length) {
     console.warn(
       '[NOTIFY] Some recipients are invalid and will be skipped:',
-      timer.recipients.filter(rec => !rec || typeof rec.contactId === 'undefined')
+      timer.recipients.filter(recipient => !recipient || typeof recipient.contactId === 'undefined')
     );
   }
 
-  for (const rec of validRecipients) {
-    console.log("[NOTIFY] Processing recipient:", rec);
-    const contact = contacts[rec.contactId];
+  for (const recipient of validRecipients) {
+    console.log("[NOTIFY] Processing recipient:", recipient);
+    const contact = contacts[recipient.contactId];
     if (!contact) {
-      console.warn('[NOTIFY] No contact found for contactId:', rec.contactId);
+      console.warn('[NOTIFY] No contact found for contactId:', recipient.contactId);
       continue;
     }
-    const deviceList = rec.devices.length
-      ? contact.devices.filter(d => rec.devices.some(r => String(r.id) === String(d.id)))
+    const deviceList = recipient.devices.length
+      ? contact.devices.filter(device => recipient.devices.some(recDevice => String(recDevice.id) === String(device.id)))
       : contact.devices;
     for (const device of deviceList) {
       if (!device.subscription) continue;
       try {
         await webpush.sendNotification(device.subscription, JSON.stringify({
-          title: 'Timer Alert',
+          title: timer.name || 'Timer Alert Changed',
           body: message,
           timerId: timer.id,
           deviceName: device.name || '',
@@ -67,11 +85,30 @@ async function notifyRecipients(timer, message) {
   }
 }
 
+function mergeRecipients(oldRecipients = [], newRecipients = []) {
+  const merged = {};
 
+  for (const recipient of oldRecipients.concat(newRecipients)) {
+    if (!recipient || !recipient.contactId) continue;
+    if (!merged[recipient.contactId]) {
+      merged[recipient.contactId] = {
+        ...recipient,
+        devices: Array.isArray(recipient.devices) ? [...recipient.devices] : [],
+      };
+    } else {
+      const existingDevices = merged[recipient.contactId].devices || [];
+      const incomingDevices = Array.isArray(recipient.devices) ? recipient.devices : [];
+      const allDevices = [...existingDevices, ...incomingDevices];
+      merged[recipient.contactId].devices = allDevices.filter(
+        (device, deviceIndex, deviceArr) => device && device.id && deviceArr.findIndex(d => d.id === device.id) === deviceIndex
+      );
+    }
+  }
 
+  return Object.values(merged);
+}
 
-
-module.exports = (io) => {
+const api = (io) => {
   const router = express.Router();
 
   function scheduleTimer(timer) {
@@ -85,23 +122,24 @@ module.exports = (io) => {
       timer.remaining = 0;
       timer.completed = true;
       timer.lastAction = new Date();
-      notifyRecipients(timer, 'Timer "${timer.name}" completed!')
+      // when timer lapses naturally
+      notifyRecipients(timer, `Timer "${timer.name}" completed!`);
       timerHistory.push({ ...timer });
       delete timers[timer.id];
       io.emit('dashboard-timer-removed', { id: timer.id });
     }, ms);
   }
 
-  // Create a new timer
+  // --- REST API ROUTES (unchanged except recipients logic above) ---
   router.post('/', (req, res) => {
     const { name, minutes, recipients = [] } = req.body;
     if (!name || !minutes || isNaN(minutes) || minutes < 1) {
       return res.status(400).json({ error: 'Invalid name or minutes' });
     }
-    const id = String(nextTimerId++);
+    const timerId = String(nextTimerId++);
     const created = new Date();
     const timer = {
-      id,
+      id: timerId,
       name,
       minutes,
       inputMinutes: minutes, // NEW: keep track of form entry, for pre-start value
@@ -112,127 +150,116 @@ module.exports = (io) => {
       lastAction: created,
       recipients: Array.isArray(recipients) ? recipients : [],
     };
-    timers[id] = timer;
+    timers[timerId] = timer;
     io.emit('dashboard-timer-created', serializeTimer(timer));
     res.json(serializeTimer(timer));
   });
 
-  // List all active timers
   router.get('/', (req, res) => {
     res.json(Object.values(timers).map(serializeTimer));
   });
 
-  // List timer history (expired/canceled)
   router.get('/history', (req, res) => {
     res.json(timerHistory.map(serializeTimer));
   });
 
-  // Get a single timer
   router.get('/:id', (req, res) => {
-    const t = timers[req.params.id];
-    if (!t) return res.status(404).json({ error: 'Not found' });
-    res.json(serializeTimer(t));
+    const timer = timers[req.params.id];
+    if (!timer) return res.status(404).json({ error: 'Not found' });
+    res.json(serializeTimer(timer));
   });
 
-  // Start/add-to timer
-  // Start/add-to timer
   router.post('/:id/start', async (req, res) => {
-    const t = timers[req.params.id];
+    const timer = timers[req.params.id];
     const minutes = parseInt(req.body.minutes, 10);
-    if (!t) return res.status(404).json({ error: 'Not found' });
+    if (!timer) return res.status(404).json({ error: 'Not found' });
     if (isNaN(minutes) || minutes < 1) return res.status(400).json({ error: 'Invalid minutes' });
 
     const now = nowMs();
-    t.inputMinutes = null; // CLEAR after timer starts, so field is blank on all clients
-    if (!t.running) {
-      t.running = true;
-      t.endTime = now + minutes * 60 * 1000;
-      t.remaining = minutes * 60;
+    timer.inputMinutes = null;
+    if (!timer.running) {
+      timer.running = true;
+      timer.endTime = now + minutes * 60 * 1000;
+      timer.remaining = minutes * 60;
     } else {
-      t.endTime += minutes * 60 * 1000;
-      t.remaining = Math.round((t.endTime - now) / 1000);
+      timer.endTime += minutes * 60 * 1000;
+      timer.remaining = Math.round((timer.endTime - now) / 1000);
     }
-    t.lastAction = new Date();
-    scheduleTimer(t);
+    timer.lastAction = new Date();
+    scheduleTimer(timer);
     io.emit('dashboard-timer-updated', {
-      ...serializeTimer(t),
-      remaining: t.remaining, // Ensure this is the just-set value
+      ...serializeTimer(timer),
+      remaining: timer.remaining,
       action: 'updated'
     });
 
-    // Respond quickly to client
-    res.json({ success: true, timer: serializeTimer(t) });
+    res.json({ success: true, timer: serializeTimer(timer) });
 
-    // ---- Send notifications ----
     try {
-      await notifyRecipients(t, `Timer "${t.name}" started for ${minutes} minute${minutes !== 1 ? 's' : ''}.`);
+      await notifyRecipients(timer, `Timer "${timer.name}" started for ${minutes} minute${minutes !== 1 ? 's' : ''}.`);
     } catch (err) {
       console.error('Error notifying recipients:', err);
     }
   });
 
-  // Cancel timer
   router.post('/:id/cancel', async (req, res) => {
-    const t = timers[req.params.id];
-    if (!t) return res.status(404).json({ error: 'Not found' });
-    if (t.timeout) clearTimeout(t.timeout);
-    t.running = false;
-    t.remaining = 0;
-    t.completed = false;
-    t.lastAction = new Date();
-    timerHistory.push({ ...serializeTimer(t), canceled: true });
-    delete timers[t.id];
-    io.emit('dashboard-timer-removed', { id: t.id, action: 'canceled' });
+    const timer = timers[req.params.id];
+    if (!timer) return res.status(404).json({ error: 'Not found' });
+    if (timer.timeout) clearTimeout(timer.timeout);
+    timer.running = false;
+    timer.remaining = 0;
+    timer.completed = false;
+    timer.lastAction = new Date();
+    timerHistory.push({ ...serializeTimer(timer), canceled: true });
+    delete timers[timer.id];
+    io.emit('dashboard-timer-removed', { id: timer.id, action: 'canceled' });
     res.json({ success: true });
 
-    // ---- Send notifications ----
     try {
-      await notifyRecipients(t, `Timer "${t.name}" was canceled.`);
+      await notifyRecipients(timer, `Timer "${timer.name}" was canceled.`);
     } catch (err) {
       console.error('Error notifying recipients:', err);
     }
   });
 
-  // Get timer status
   router.get('/:id/status', (req, res) => {
-    const t = timers[req.params.id];
-    if (!t) return res.status(404).json({ error: 'Not found' });
+    const timer = timers[req.params.id];
+    if (!timer) return res.status(404).json({ error: 'Not found' });
     const now = nowMs();
-    let remaining = t.running && t.endTime ? Math.max(0, Math.round((t.endTime - now) / 1000)) : 0;
+    let remaining = timer.running && timer.endTime ? Math.max(0, Math.round((timer.endTime - now) / 1000)) : 0;
     res.json({
-      ...serializeTimer(t),
+      ...serializeTimer(timer),
       remaining,
     });
   });
 
-  // PATCH /:id/recipients to add recipients (union, no duplicates), with io.emit
   router.patch('/:id/recipients', (req, res) => {
-    const t = timers[req.params.id];
-    if (!t) return res.status(404).json({ error: 'Not found' });
+    const timer = timers[req.params.id];
+    if (!timer) return res.status(404).json({ error: 'Not found' });
 
     if (!Array.isArray(req.body.recipients)) {
       return res.status(400).json({ error: 'Recipients must be an array' });
     }
 
-    // Union new recipients with existing, avoid duplicates
-    t.recipients = Array.from(new Set([...(t.recipients || []), ...req.body.recipients]));
+    timer.recipients = mergeRecipients(timer.recipients || [], req.body.recipients);
 
-    io.emit('dashboard-timer-updated', { ...serializeTimer(t), action: 'recipients-added' });
-    res.json({ success: true, recipients: t.recipients });
+    io.emit('dashboard-timer-updated', { ...serializeTimer(timer), action: 'recipients-added' });
+    res.json({ success: true, recipients: timer.recipients });
   });
 
-
-  // Remove recipients
   router.delete('/:id/recipients', (req, res) => {
-    const t = timers[req.params.id];
-    if (!t) return res.status(404).json({ error: 'Not found' });
+    const timer = timers[req.params.id];
+    if (!timer) return res.status(404).json({ error: 'Not found' });
     if (!Array.isArray(req.body.recipients)) {
       return res.status(400).json({ error: 'Recipients must be an array' });
     }
-    t.recipients = (t.recipients || []).filter(r => !req.body.recipients.includes(r));
-    io.emit('dashboard-timer-updated', { ...serializeTimer(t), action: 'recipients-removed' });
-    res.json({ success: true, recipients: t.recipients });
+    timer.recipients = (timer.recipients || []).filter(recipient => !req.body.recipients.includes(recipient));
+    io.emit('dashboard-timer-updated', { ...serializeTimer(timer), action: 'recipients-removed' });
+    res.json({ success: true, recipients: timer.recipients });
   });
 
   return router;
 };
+
+module.exports = api;
+module.exports.timers = timers;

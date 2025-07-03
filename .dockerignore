@@ -12,6 +12,8 @@ logs
 
 .env
 .env.*
+
+cert/
  
  my_notes.txt
  build_images.sh

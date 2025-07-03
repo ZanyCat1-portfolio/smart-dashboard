@@ -6,7 +6,6 @@
   line-height: 1.5;
   font-weight: 400;
 
-  /* Default to dark background; prefer light in media query below */
   color-scheme: light dark;
   color: #fff;
   background-color: #242424;
@@ -30,8 +29,9 @@
 }
 
 /* ===========================
-   Body & Layout
+   Miscellaneous Elements
    =========================== */
+html { scroll-behavior: smooth; }
 body,
 #app {
   margin: 0;
@@ -50,12 +50,32 @@ body,
   text-align: center;
 }
 
-/* ===========================
-   Headings, Cards, Links
-   =========================== */
-h1 { font-size: 3.2em; line-height: 1.1; }
-.card { padding: 2em; transition: background-color 300ms, color 300ms, border-color 300ms; }
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
 
+/* ===========================
+   Card Stylings
+   =========================== */
+.card {
+  padding: 2em;
+  transition: background-color 300ms, color 300ms, border-color 300ms;
+}
+.card-title {
+  max-width: 200px;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+/* ===========================
+   Links & Buttons
+   =========================== */
 a {
   font-weight: 500;
   color: #646cff;
@@ -75,7 +95,8 @@ button {
   transition: border-color 0.25s;
 }
 button:hover { border-color: #646cff; }
-button:focus, button:focus-visible { outline: 4px auto -webkit-focus-ring-color; }
+button:focus,
+button:focus-visible { outline: 4px auto -webkit-focus-ring-color; }
 
 /* ===========================
    Sticky Nav & Transitions
@@ -99,8 +120,8 @@ body, html, nav.sticky-nav, .btn,
 .toggle-switch {
   position: relative;
   display: inline-block;
-  width: 3rem;     /* 48px */
-  height: 1.5rem;  /* 24px */
+  width: 3rem;
+  height: 1.5rem;
   border-radius: 9999px;
   background-color: #d1d5db;
   transition: background-color 200ms ease-in-out;
@@ -109,7 +130,6 @@ body, html, nav.sticky-nav, .btn,
   vertical-align: middle;
 }
 .toggle-switch:checked { background-color: #22c55e; }
-
 .toggle-switch::before {
   content: '';
   position: absolute;
@@ -124,21 +144,6 @@ body, html, nav.sticky-nav, .btn,
 }
 .toggle-switch:checked::before {
   transform: translateX(1.5rem);
-}
-
-/* ===========================
-   Card Stylings
-   =========================== */
-
-.card-title {
-  max-width: 200px;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: normal;
 }
 
 /* ===========================
@@ -214,8 +219,3 @@ input.form-control:-webkit-autofill:focus {
   color: #0e0e0e !important;
   -webkit-text-fill-color: #0e0e0e !important;
 }
-
-/* ===========================
-   Misc
-   =========================== */
-html { scroll-behavior: smooth; }

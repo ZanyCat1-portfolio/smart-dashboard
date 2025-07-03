@@ -1,29 +1,28 @@
-// verify‑devices.js
 const fs       = require('fs');
 const path     = require('path');
 const axios    = require('axios');
 const chokidar = require('chokidar');
 
-const DEVICES_FILE  = path.join(__dirname, '../../public', 'devices.json');
-console.log("dirname: ", __dirname)
-let  isWriting     = false;
+const DEVICES_FILE_PATH  = path.join(__dirname, '../../public', 'devices.json');
+console.log("dirname: ", __dirname);
+let  isCurrentlyWriting     = false;
 
 // load & save
-function load() {
-  return JSON.parse(fs.readFileSync(DEVICES_FILE, 'utf8'));
+function loadDevices() {
+  return JSON.parse(fs.readFileSync(DEVICES_FILE_PATH, 'utf8'));
 }
-function save(devices) {
-  isWriting = true;
-  fs.writeFileSync(DEVICES_FILE, JSON.stringify(devices, null, 2));
-  isWriting = false;
+function saveDevices(devicesObject) {
+  isCurrentlyWriting = true;
+  fs.writeFileSync(DEVICES_FILE_PATH, JSON.stringify(devicesObject, null, 2));
+  isCurrentlyWriting = false;
 }
 
 // ping checker
-async function check(d) {
-  if (d.type !== 'tasmota' || !d.ip || d.example === true) return true;
-  const url = `http://${d.ip}/cm?cmnd=${encodeURIComponent('STATUS 0')}`;
+async function checkDevice(device) {
+  if (device.type !== 'tasmota' || !device.ip || device.example === true) return true;
+  const statusUrl = `http://${device.ip}/cm?cmnd=${encodeURIComponent('STATUS 0')}`;
   try {
-    await axios.get(url, { timeout: 2000 });
+    await axios.get(statusUrl, { timeout: 2000 });
     return true;
   } catch {
     return false;
@@ -31,36 +30,36 @@ async function check(d) {
 }
 
 // the actual verifier
-async function verifyAll() {
-  const raw = load();
-  let dirty = false;
+async function verifyAllDevices() {
+  const devicesObject = loadDevices();
+  let wasModified = false;
 
-  for (const [key, d] of Object.entries(raw)) {
-    if (key.startsWith('_')) continue;
-    const ok = await check(d);
-    console.log(`[verify] ${key} → ${ok}`);
-    if (d.verified !== ok) {
-      raw[key].verified = ok;
-      dirty = true;
+  for (const [deviceKey, device] of Object.entries(devicesObject)) {
+    if (deviceKey.startsWith('_')) continue;
+    const isVerified = await checkDevice(device);
+    console.log(`[verify] ${deviceKey} → ${isVerified}`);
+    if (device.verified !== isVerified) {
+      devicesObject[deviceKey].verified = isVerified;
+      wasModified = true;
     }
   }
 
-  if (dirty) {
+  if (wasModified) {
     console.log('[verify] writing updated devices.json');
-    save(raw);
+    saveDevices(devicesObject);
   }
 }
 
 // run once on startup
-verifyAll();
+verifyAllDevices();
 
 // watch for external changes to devices.json
-chokidar.watch(DEVICES_FILE, { ignoreInitial: true })
+chokidar.watch(DEVICES_FILE_PATH, { ignoreInitial: true })
   .on('change', () => {
-    if (isWriting) return;    // skip our own writes
+    if (isCurrentlyWriting) return;    // skip our own writes
     console.log('[watcher] devices.json changed — re-running verifier');
-    verifyAll();
+    verifyAllDevices();
   });
 
 // export if you need to hook into your server startup
-module.exports = { verifyAll };
+module.exports = { verifyAllDevices };

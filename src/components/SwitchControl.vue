@@ -9,7 +9,10 @@
 
 <script>
 export default {
-  props: ['label', 'endpoint'],
+  props: {
+    label: { type: String, required: true },
+    endpoint: { type: String, required: true }
+  },
   data() {
     return { loading: false }
   },
@@ -18,8 +21,8 @@ export default {
       this.loading = true;
       try {
         await fetch(`/api/${this.endpoint}/toggle`, { method: 'GET' });
-      } catch (e) {
-        alert('Failed to toggle switch: ' + e.message);
+      } catch (error) {
+        alert('Failed to toggle switch: ' + error.message);
       } finally {
         this.loading = false;
       }
