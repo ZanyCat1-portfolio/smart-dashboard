@@ -38,6 +38,7 @@
 
 <script>
 export default {
+  emits: ['deviceUnregistered'],
   data() {
     return {
       contactName: '',
@@ -50,14 +51,38 @@ export default {
       alreadyRegistered: false
     };
   },
-  mounted() {
-    const reg = localStorage.getItem('registeredDevice');
-    if (reg) {
-      const info = JSON.parse(reg);
-      this.registeredAs = `${info.contactName} / ${info.deviceName}`;
-      this.alreadyRegistered = true;
+  async mounted() {
+    try {
+      // 1. Get the push subscription for this browser
+      const subscription = await this.getPushSubscription();
+      
+      const endpoint = subscription.endpoint;
+      // 2. Query backend for this device
+      const res = await fetch('/api/contacts/find-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint })
+      });
+      if (res.ok) {
+        const info = await res.json();
+        if (info && info.contactName && info.deviceName) {
+          this.registeredAs = `${info.contactName} / ${info.deviceName}`;
+          this.alreadyRegistered = true;
+        } else {
+          this.registeredAs = '';
+          this.alreadyRegistered = false;
+        }
+      } else {
+        this.registeredAs = '';
+        this.alreadyRegistered = false;
+      }
+    } catch (error) {
+      // Fallback to unregistered state
+      this.registeredAs = '';
+      this.alreadyRegistered = false;
     }
   },
+
   methods: {
     async registerDevice() {
       this.error = null;
@@ -73,8 +98,8 @@ export default {
           body: JSON.stringify({
             contactName: this.contactName,
             deviceName: this.deviceName,
-            isPublic: this.isPublic,
             subscription,
+            isPublic: this.isPublic,
             platform
           })
         });
@@ -120,8 +145,6 @@ export default {
         // Retrieve contactId and deviceId from localStorage (or component state)
         const registered = JSON.parse(localStorage.getItem('registeredDevice'));
         if (registered && registered.contactId && registered.deviceId) {
-          console.log("await fetch/ what is URL?")
-          console.log(`/api/contacts/${registered.contactId}/devices/${registered.deviceId}`)
           await fetch(`/api/contacts/${registered.contactId}/devices/${registered.deviceId}`, {
           // can we use base? we need to define it
           // await fetch(`${base}api/contacts/${registered.contactId}/devices/${registered.deviceId}`, {
@@ -130,11 +153,10 @@ export default {
         } else {
           throw new Error('Missing contact or device ID');
         }
-        console.log("[HERE] getting here?")
         // Remove from localStorage and update state/UI
         localStorage.removeItem('registeredDevice');
         this.registeredAs = '';
-        this.alreadyRegistered = false;
+        this.alreadyRegistered = false;u
         this.$emit('device-unregistered');
       } catch (error) {
         this.error = 'Failed to unregister device.';
@@ -143,9 +165,10 @@ export default {
     async getPushSubscription() {
       if (!('serviceWorker' in navigator)) throw new Error('Service Worker not supported');
       if (!('PushManager' in window)) throw new Error('Push not supported in this browser');
-
+      
       // Use the same registration as in main.js
       const swReg = await navigator.serviceWorker.ready;
+      console.log("THIS LOG NEVER APPEARS")
 
       // Request notification permission
       const permission = await Notification.requestPermission();

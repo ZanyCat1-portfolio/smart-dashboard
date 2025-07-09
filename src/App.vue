@@ -1,143 +1,127 @@
 <template>
   <div :class="['container mt-4', theme]">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h1 class="display-4 text-primary">Smart Switch Dashboard</h1>
-      <button @click="toggleTheme" class="btn btn-outline-secondary">
-        <i :class="theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill'"></i>
-        {{ theme === 'dark' ? 'Light Mode' : 'Dark Mode' }}
-      </button>
-    </div>
 
-    <DeviceRegistration @device-unregistered="onDeviceUnregistered" />
 
-    <div v-if="isExampleFile" class="alert alert-warning">
-      <i class="bi bi-exclamation-triangle"></i>
-      {{ exampleInfo }}
-    </div>
+    <AdminPanel v-if="currentPage === 'admin'" 
+    :exit="() => currentPage = 'dashboard'" 
+    :reload-timers="loadDashboardTimers"
+    :timers="timers" />
 
-    <nav class="mb-4 sticky-nav">
-      <ul class="nav nav-tabs">
-        <li v-for="type in Object.keys(groupedDevices)" :key="type" class="nav-item">
-          <a class="nav-link" href="#" @click.prevent="scrollToGroup(type)">
-            {{ formatType(type) }}
-          </a>
-        </li>
-      </ul>
-    </nav>
-
-    <div v-if="loadingDevices" class="text-center my-5">
-      <div class="spinner-border text-primary" role="status" style="width:2rem; height:2rem;"></div>
-      <p class="mt-2 text-muted">Loading devices…</p>
-    </div>
-
+    
     <div v-else>
-      <div
-        v-for="(devices, type) in groupedDevices"
-        :key="type"
-        :id="type"
-        :ref="`group-${type}`"
-        class="card mb-4"
-        style="scroll-margin-top: 4rem;"
-      >
+      <button class="btn btn-warning ms-2" @click="currentPage = 'admin'">
+        Admin Panel
+      </button>
+  
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="display-4 text-primary">Smart Switch Dashboard</h1>
+        <button @click="toggleTheme" class="btn btn-outline-secondary">
+          <i :class="theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill'"></i>
+          {{ theme === 'dark' ? 'Light Mode' : 'Dark Mode' }}
+        </button>
+      </div>
+  
+      <DeviceRegistration @device-unregistered="onDeviceUnregistered" />
+  
+      <div v-if="isExampleFile" class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i>
+        {{ exampleInfo }}
+      </div>
+  
+      <nav class="mb-4 sticky-nav">
+        <ul class="nav nav-tabs">
+          <li v-for="type in Object.keys(groupedDevices)" :key="type" class="nav-item">
+            <a class="nav-link" href="#" @click.prevent="scrollToGroup(type)">
+              {{ formatType(type) }}
+            </a>
+          </li>
+        </ul>
+      </nav>
+  
+      <div v-if="loadingDevices" class="text-center my-5">
+        <div class="spinner-border text-primary" role="status" style="width:2rem; height:2rem;"></div>
+        <p class="mt-2 text-muted">Loading devices…</p>
+      </div>
+  
+      <div v-else>
         <div
-          class="card-header d-flex justify-content-between align-items-center"
-          @click="toggleGroup(type)"
-          style="cursor: pointer;"
+          v-for="(devices, type) in groupedDevices"
+          :key="type"
+          :id="type"
+          :ref="`group-${type}`"
+          class="card mb-4"
+          style="scroll-margin-top: 4rem;"
         >
-          <h2 class="mb-0">{{ formatType(type) }}</h2>
-          <span>
-            <i v-if="openGroups[type]" class="bi bi-chevron-up"></i>
-            <i v-else class="bi bi-chevron-down"></i>
-          </span>
-        </div>
-
-
-        <div v-show="openGroups[type]" class="card-body">
-          <!-- Timers group (dashboard timers only, uses new logic) -->
-          <template v-if="type === 'timers'">
-            <div class="mb-3 d-flex align-items-center gap-2">
-              <button class="btn btn-success" @click="showTimerForm = !showTimerForm">
-                <span v-if="!showTimerForm">+ Add Timer</span>
-                <span v-else>Cancel</span>
-              </button>
-              <button class="btn btn-secondary" @click="showHistory">
-                View Timer History
-              </button>
-            </div>
-            <div v-if="showTimerForm" class="mb-4">
-              <TimerCreateForm
-                @create="addDashboardTimer"
-                @cancel="showTimerForm = false"
-              />
-            </div>
-            <div v-if="timers.length === 0" class="text-muted mb-3">
-              No timers yet. Click <b>+ Add Timer</b> to create one.
-            </div>
-            <div class="row row-cols-1 row-cols-md-2 g-4">
-              <div v-for="timer in timers" :key="timer.id" class="col">
-                <TimerCard
-                  :timer="timer"
-                  :contacts="contacts"
-                  @start="min => startDashboardTimer(timer, min)"
-                  @add="min => addToDashboardTimer(timer, min)"
-                  @cancel="() => cancelDashboardTimer(timer)"
-                  @update-recipients="recips => updateTimerRecipients(timer, recips)"
-                />
-
-              </div>
-            </div>
-            <div v-if="showTimerHistory" class="mb-4">
-              <div class="d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Timer History</h5>
-                <button class="btn btn-outline-secondary btn-sm" @click="showTimerHistory = false">
-                  Close
+          <div
+            class="card-header d-flex justify-content-between align-items-center"
+            @click="toggleGroup(type)"
+            style="cursor: pointer;"
+          >
+            <h2 class="mb-0">{{ formatType(type) }}</h2>
+            <span>
+              <i v-if="openGroups[type]" class="bi bi-chevron-up"></i>
+              <i v-else class="bi bi-chevron-down"></i>
+            </span>
+          </div>
+  
+  
+          <div v-show="openGroups[type]" class="card-body">
+            <!-- Timers group (dashboard timers only, uses new logic) -->
+            <template v-if="type === 'timers'">
+              <div class="mb-3 d-flex align-items-center gap-2">
+                <button class="btn btn-success" @click="showTimerForm = !showTimerForm">
+                  <span v-if="!showTimerForm">+ Add Timer</span>
+                  <span v-else>Cancel</span>
                 </button>
+                
               </div>
-              <div v-if="timerHistory.length === 0" class="mt-3 text-muted">No timer history yet.</div>
-              <ul v-else class="list-group mt-3">
-                <li v-for="timer in timerHistory" :key="timer.id" class="list-group-item d-flex justify-content-between align-items-center">
-                  <span>
-                    <b>{{ timer.name }}</b> 
-                    <span v-if="timer.canceled" class="badge bg-warning text-dark ms-2">Canceled</span>
-                    <span v-else class="badge bg-success ms-2">Completed</span>
-                  </span>
-                  <span>
-                    <span class="text-muted">{{ formatDate(timer.lastAction || timer.created) }}</span>
-                  </span>
-                </li>
-              </ul>
-            </div>
-          </template>
-
-
-
-
-
-
-
-          <!-- All other device groups (Tasmota, Govee, etc.) use old logic untouched -->
-          <template v-else>
-            <div class="row row-cols-1 row-cols-md-2 g-4">
-              <div v-for="device in devices" :key="device.endpoint" class="col">
-                <component
-                  :is="getCardComponent(device)"
-                  :device="device"
-                  :state="computedDeviceState(device.endpoint)"
-                  :theme="theme"
-                  :get-api-route="getApiRoute"
-                  :timer-state="timerStates[device.endpoint]"
-                  :timer-display="timerDisplays[device.endpoint]"
-                  :on-start-timer="(minutes) => startDeviceTimer(device, minutes)"
-                  :on-add-to-timer="(minutes) => addToDeviceTimer(device, minutes)"
-                  :on-cancel-timer="() => cancelDeviceTimer(device)"
-                  @refresh="fetchStatus(device)"
+              <div v-if="showTimerForm" class="mb-4">
+                <TimerCreateForm
+                  @create="addDashboardTimer"
+                  @cancel="showTimerForm = false"
                 />
               </div>
-            </div>
-          </template>
+              <div v-if="timers.length === 0" class="text-muted mb-3">
+                No timers yet. Click <b>+ Add Timer</b> to create one.
+              </div>
+              <div class="row row-cols-1 row-cols-md-2 g-4">
+                <div v-for="timer in timers" :key="timer.id" class="col">
+                  <TimerCard
+                    :timer="timer"
+                    :contacts="contacts"
+                    @refresh="loadDashboardTimers"
+                    @update-recipients="recips => updateTimerRecipients(timer, recips)"
+                  />
+                </div>
+              </div>
+            </template>
+  
+            <!-- All other device groups (Tasmota, Govee, etc.) use old logic untouched -->
+            <template v-else>
+              <div class="row row-cols-1 row-cols-md-2 g-4">
+                <div v-for="device in devices" :key="device.endpoint" class="col">
+                  <component
+                    :is="getCardComponent(device)"
+                    :device="device"
+                    :state="computedDeviceState(device.endpoint)"
+                    :theme="theme"
+                    :get-api-route="getApiRoute"
+                    :timer-state="timerStates[device.endpoint]"
+                    :timer-display="timerDisplays[device.endpoint]"
+                    :on-start-timer="(minutes) => startDeviceTimer(device, minutes)"
+                    :on-add-to-timer="(minutes) => addToDeviceTimer(device, minutes)"
+                    :on-cancel-timer="() => cancelDeviceTimer(device)"
+                    @refresh="fetchStatus(device)"
+                  />
+                </div>
+              </div>
+            </template>
+          </div>
         </div>
       </div>
+      
     </div>
+
   </div>
 </template>
 
@@ -149,14 +133,17 @@ import TimerCard from './components/TimerCard.vue'
 import TimerCreateForm from './components/TimerCreateForm.vue'
 import { setDevtoolsHook } from 'vue'
 import DeviceRegistration from './components/DeviceRegistration.vue'
+import AdminPanel from './components/AdminPanel.vue'
+import { formatDisplay, isLive } from './utils/utils.js'
 
 const base = import.meta.env.BASE_URL
 
 export default {
   name: 'App',
-  components: { TimerCard, TimerCreateForm, TasmotaCard, GoveeCard, DeviceRegistration },
+  components: { TimerCard, TimerCreateForm, TasmotaCard, GoveeCard, DeviceRegistration, AdminPanel },
   data() {
     return {
+      currentPage: 'dashboard',
       contacts: [],
       loadingDevices: true,
       devices: [],
@@ -167,9 +154,7 @@ export default {
       exampleInfo: '',
       socket: null,
       timers: [],
-      timerHistory: [],
       showTimerForm: false,
-      showTimerHistory: false,
       timerStates: {},
       timerDisplays: {}
     }
@@ -197,6 +182,7 @@ export default {
   },
   async mounted() {
 
+    // this.reloadTimers();
     // Load all contacts for RecipientsSelector
     const res = await fetch(`${base}api/contacts`);
     this.contacts = await res.json();
@@ -210,7 +196,6 @@ export default {
 
     // --- Dashboard Timers ---
     await this.loadDashboardTimers();
-    await this.loadDashboardTimerHistory();
 
     // Poll dashboard timers every second
     this.dashboardTimerPoll = setInterval(() => {
@@ -223,6 +208,7 @@ export default {
     this.tasmotaTimerPoll = setInterval(() => {
       this.devices.forEach(device => {
         if (device.type === 'tasmota') {
+          console.log("device: ", device)
           this.fetchTasmotaTimerStatus(device);
         }
       });
@@ -264,7 +250,7 @@ export default {
     this.socket.on('dashboard-timer-created', timer => {
       // Only add if it doesn't already exist (avoid duplicates)
       if (!this.timers.some(t => t.id === timer.id)) {
-        timer.display = this.formatDisplay(timer.remaining); // <- Add this line
+        timer.display = formatDisplay(timer.remaining); // <- Add this line
         this.timers.push(timer);
       }
     });
@@ -276,22 +262,18 @@ export default {
         this.timers[timerIndex] = { 
           ...this.timers[timerIndex], 
           ...updated,
-          display: this.formatDisplay(updated.remaining),
+          display: formatDisplay(updated.remaining),
           inputMinutes: null
         };
         if (typeof updated.minutes !== 'undefined') {
           this.timers[timerIndex].inputMinutes = updated.minutes;
         }
       }
-      if (updated.action === 'lapsed' && this.showTimerHistory) {
-        await this.loadDashboardTimerHistory();
-      }
     });
 
 
     this.socket.on('dashboard-timer-removed', async ({ id }) => {
       this.removeActiveDashboardTimerById(id)
-        if (this.showTimerHistory) await this.loadDashboardTimerHistory();
       // this.timers = this.timers.filter(t => t.id !== id);
     });
 
@@ -307,6 +289,14 @@ export default {
     )
 
     this.loadingDevices = false
+
+    this.dashboardTimerPoll = setInterval(() => {
+      this.timers.forEach(timer => {
+        if (isLive(timer)) {
+          this.pollDashboardTimerStatus(timer);
+        }
+      });
+    }, 1000);
   },
 
   // And in your `beforeUnmount` (or `beforeDestroy` for Vue 2)
@@ -318,9 +308,32 @@ export default {
   beforeUnmount() {
     if (this.dashboardTimerPoll) clearInterval(this.dashboardTimerPoll);
   },
+  
+  
+  
   methods: {
+    // async reloadTimers() {
+    //   // Example fetch, adapt path to your API!
+    //   const resp = await fetch('/api/timers');
+    //   this.timers = await resp.json();
+    // },
+    async pollDashboardTimerStatus(timer) {
+      console.log("rebuild pollDashboardTimerStatus")
+      try {
+        const res = await fetch(`/api/timers/${timer.id}/status`);
+        const status = await res.json();
+        // Update timer properties in-place
+        timer.running = status.running;
+        timer.remaining = status.remaining;
+        timer.display = formatDisplay(status.remaining);
+      } catch {
+        timer.running = false;
+        timer.remaining = 0;
+        timer.display = '0:00';
+      }
+    },
     async updateTimerRecipients(timer, recipients) {
-      console.log("updateTimerRecipients called. Recipients:", recipients);
+      // console.log("updateTimerRecipients called. Recipients:", recipients);
 
       if (!Array.isArray(recipients)) {
         throw new Error("Recipients payload is not an array!");
@@ -344,7 +357,7 @@ export default {
         const remaining = statusJson.remainingMs
           ? Math.floor(statusJson.remainingMs / 1000)
           : (typeof statusJson.remaining === 'number' ? statusJson.remaining : 0);
-        const display = this.formatDisplay(remaining);
+        const display = formatDisplay(remaining);
 
         this.timerStates[device.endpoint] = {
           running: !!statusJson.running,
@@ -369,22 +382,16 @@ export default {
       if (!date) return '';
       return new Date(date).toLocaleString();
     },
-    async showHistory() {
-      await this.loadDashboardTimerHistory();
-      this.showTimerHistory = !this.showTimerHistory;
-    },
     async loadDashboardTimers() {
       const res = await fetch(`${base}api/timers`);
       const timers = await res.json();
+      console.log('[loadDashboardTimers] Timers:', timers);
       // Ensure each timer has recipients
       this.timers = timers.map(timer => ({
         ...timer,
         recipients: Array.isArray(timer.recipients) ? timer.recipients : []
       }));
-    },
-    async loadDashboardTimerHistory() {
-      const res = await fetch(`${base}api/timers/history`);
-      this.timerHistory = await res.json();
+      console.log('[loadDashboardTimers] this.timers:', this.timers);
     },
     async addDashboardTimer({ name, minutes, recipients = [] }) {
       // POST /api/timers
@@ -397,7 +404,7 @@ export default {
       // Defensive: ensure recipients is always an array
       if (!Array.isArray(timer.recipients)) timer.recipients = [];
       // Defensive: set timer.display for UI
-      timer.display = this.formatDisplay(timer.remaining);
+      timer.display = formatDisplay(timer.remaining);
 
       // Do not push timer; rely on socket.io for real-time update
       this.showTimerForm = false;
@@ -412,7 +419,7 @@ export default {
       });
       // do we need for optimistic?
       // timer.remaining = minutes * 60;
-      // timer.display = this.formatDisplay(timer.remaining);
+      // timer.display = formatDisplay(timer.remaining);
       // timer.inputMinutes = null; // Clear input field
     },
     async addToDashboardTimer(timer, minutes) {
@@ -421,18 +428,17 @@ export default {
     async cancelDashboardTimer(timer) {
       // POST /api/timers/:id/cancel
       await fetch(`${base}api/timers/${timer.id}/cancel`, { method: 'POST' });
-      await this.loadDashboardTimerHistory();
     },
     async fetchDashboardTimerStatus(timer) {
+      console.log("rebuild fetchDashboardTimerstatus")
       const res = await fetch(`${base}api/timers/${timer.id}/status`);
       const statusJson = await res.json();
 
       Object.assign(timer, statusJson);
-      timer.display = this.formatDisplay(timer.remaining);
+      timer.display = formatDisplay(timer.remaining);
 
-      if (!timer.running && timer.remaining === 0) {
+      if (['finished', 'canceled'].includes(timer.status)) {
         this.removeActiveDashboardTimerById(timer.id);
-        await this.loadDashboardTimerHistory?.();
       }
     },
     // Do we ever need this? In case of network blip?
@@ -442,12 +448,14 @@ export default {
     //   const timerIndex = this.timers.findIndex(timer => timer.id === timerId);
     //   if (timerIndex !== -1) {
     //     this.timers[timerIndex] = { ...this.timers[timerIndex], ...updatedTimer };
-    //     this.timers[timerIndex].display = this.formatDisplay(this.timers[timerIndex].remaining);
+    //     this.timers[timerIndex].display = formatDisplay(this.timers[timerIndex].remaining);
     //   }
     // },
 
     removeActiveDashboardTimerById(timerId) {
       this.timers = this.timers.filter(timer => timer.id !== timerId);
+      console.log("what is timerId: ", timerId)
+      console.log("how did this.timers end up?", this.timers)
     },
 
     // ----------- TASMOTA/DEVICE LOGIC (Original) -----------
@@ -513,11 +521,12 @@ export default {
           label: device.label || key
         }))
     },
-    formatDisplay(sec) {
-      const min = Math.floor(sec / 60);
-      const s = sec % 60;
-      return `${min}:${s.toString().padStart(2, '0')}`;
-    },
+    // formatDisplay(sec) {
+    //   console.log("Does formatDisplay occur?")
+    //   const min = Math.floor(sec / 60);
+    //   const s = sec % 60;
+    //   return `${min}:${s.toString().padStart(2, '0')}`;
+    // },
     toggleTheme() {
       this.theme = this.theme === 'light' ? 'dark' : 'light';
       document.body.classList.toggle('dark-mode', this.theme === 'dark');

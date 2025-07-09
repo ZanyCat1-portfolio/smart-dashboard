@@ -1,17 +1,19 @@
 <template>
   <div class="d-flex align-items-center mb-3 gap-2 flex-wrap timer-controls">
+    <h4>is timer live: {{ isTimerLive }}</h4>
+    <!-- <h4>timer: {{ timer }}</h4> -->
     <button
       class="btn btn-primary"
-      :disabled="!inputMinutes || inputMinutes < 1"
+      :disabled="!timer.minutes || timer.minutes < 1"
       @click="onStartOrAdd"
     >
-      {{ running ? 'Add to Timer' : 'Start Timer' }}
+      {{ isTimerLive && timer.status === 'pending' || timer.status === 'paused' ? 'Start Timer' : 'Pause Timer' }}
     </button>
     <input
       type="number"
       min="1"
       max="1440"
-      v-model.number="inputMinutes"
+      v-model.number="timer.minutes"
       class="form-control"
       style="width:80px"
       placeholder="Min"
@@ -19,25 +21,39 @@
     />
     <button
       class="btn btn-danger"
-      v-show="running"
       @click="$emit('cancel')"
     >
       Cancel Timer
     </button>
     <span style="min-width:80px;" class="ms-2 fw-bold text-info">
-      <span v-if="running">⏳ {{ display }}</span>
+      <span v-if="isTimerLive">⏳ {{ formattedRemaining }}</span>
       <span v-else style="opacity:0;">88:88</span>
     </span>
   </div>
 </template>
 
 <script>
+import { formatDisplay, isLive } from '../utils/utils.js';
 export default {
   props: {
-    running: Boolean,
-    remaining: Number,
-    display: String,
-    initialMinutes: { type: Number, default: null }
+    timer: { type: Object, required: true },
+    // remaining: Number,
+    // display: String,
+    // initialMinutes: { type: Number, default: null }
+  },
+  computed: {
+    formattedRemaining() {
+      if (!this.timer.end_time) return '00:00';
+      const now = Date.now();
+      const end = new Date(this.timer.end_time).getTime();
+      const remaining = Math.max(0, Math.round((end - now) / 1000));
+      const min = Math.floor(remaining / 60);
+      const sec = remaining % 60;
+      return `${min}:${sec.toString().padStart(2, '0')}`;
+    },
+    isTimerLive() {
+      return isLive(this.timer);
+    }
   },
   data() {
     return {

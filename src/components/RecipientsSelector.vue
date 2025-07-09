@@ -10,7 +10,7 @@
       </select>
       <template v-if="selectedContact">
         <div>
-          <span v-for="device in selectedContact.devices" :key="device.id" class="form-check form-check-inline">
+          <span v-for="device in devicesForSelectedContact" :key="device.id" class="form-check form-check-inline">
             <input
               type="checkbox"
               class="form-check-input"
@@ -20,7 +20,7 @@
               @change="onDeviceCheckboxChange(device.id, $event)"
             >
             <label class="form-check-label" :for="'device-' + device.id">
-              {{ device.name || device.id }}
+              {{ device.device_name || device.id }}
               <span v-if="isDeviceAlreadyAdded(selectedContact.id, device.id)" class="text-muted" style="font-size:0.8em;">(already added)</span>
             </label>
           </span>
@@ -63,6 +63,7 @@
 export default {
   name: 'RecipientsSelector',
   props: {
+    timerId: { type: [Number, String], required: true },
     recipients: { type: Array, default: () => [] },
     contacts: { type: Array, required: true }
   },
@@ -70,25 +71,36 @@ export default {
     return {
       selectedContactId: '',
       selectedDeviceIds: [],
-      localRecipients: []
+      localRecipients: [],
+      devicesForSelectedContact: []
     }
   },
   computed: {
     selectedContact() {
-      return this.contacts.find(contact => String(contact.id) === String(this.selectedContactId));
+      return this.contacts.find(contact => contact.id === this.selectedContactId);
     }
   },
   watch: {
+    selectedContactId: {
+      immediate: true,
+      async handler(contactId) {
+        if (contactId) {
+          // Fetch devices from your API for this contactId
+          console.log("what is contactId in RecipSelec.vue: ", contactId)
+          const res = await fetch(`/api/contacts/${contactId}/devices`)
+          this.devicesForSelectedContact = await res.json();
+        } else {
+          this.devicesForSelectedContact = [];
+        }
+      }
+    },
     recipients: {
       immediate: true,
       handler(newRecipients) {
         this.localRecipients = Array.isArray(newRecipients) ? JSON.parse(JSON.stringify(newRecipients)) : [];
-        console.log('localRecipients updated', this.localRecipients);
+        // console.log('localRecipients updated', this.localRecipients);
       }
     },
-    selectedContactId() {
-      this.syncSelectedDeviceIds();
-    }
   },
   methods: {
     // Remove any devices from selection that are already added
@@ -107,7 +119,7 @@ export default {
         rec => String(rec.contactId) === String(contactId)
       );
       const isAlreadyAdded = recipient && recipient.devices.some(device => String(device.id) === String(deviceId));
-      console.log('isDeviceAlreadyAdded?', contactId, deviceId, '=>', isAlreadyAdded, recipient ? recipient.devices : 'NO RECIPIENT');
+      // console.log('isDeviceAlreadyAdded?', contactId, deviceId, '=>', isAlreadyAdded, recipient ? recipient.devices : 'NO RECIPIENT');
       return isAlreadyAdded;
     },
     // Checkbox handler for device selection
@@ -121,66 +133,46 @@ export default {
       }
     },
     // Add the selected recipient and device(s)
-    addRecipient() {
+    async addRecipient() {
+      // 1. Validate input
       if (!this.selectedContactId || this.selectedDeviceIds.length === 0) return;
       const contact = this.selectedContact;
-      if (!contact || !contact.id || !contact.name) {
-        console.warn("No valid contact found for selectedContactId:", this.selectedContactId);
-        return;
-      }
+      if (!contact || !contact.id) return;
 
-      // Only include devices not already present
-      const selectedDevices = contact.devices.filter(
-        device => this.selectedDeviceIds.includes(device.id)
-      );
-      if (!selectedDevices.length) return;
+      // 2. For each device, POST to the backend API to add this recipient/device to the timer
+      // (Assuming you have a prop: timerId)
+      try {
+        for (const deviceId of this.selectedDeviceIds) {
 
-      // Only add valid devices
-      const validDevices = selectedDevices.filter(device => device && device.id && (device.name || device.id));
+          const alreadyExists = this.recipients.some(
+            rec => rec.contact_id == contact.id && rec.device_id == deviceId
+          );
+          if (alreadyExists) continue; // skip duplicates
 
-      // Find or create recipient
-      let recipient = this.localRecipients.find(rec => rec.contactId == contact.id);
-      if (recipient) {
-        // Merge new devices, avoiding duplicates
-        const existingIds = new Set(recipient.devices.map(device => String(device.id)));
-        const newDevices = validDevices.filter(device => !existingIds.has(String(device.id)));
-        if (newDevices.length) {
-          recipient.devices = [...recipient.devices, ...newDevices];
+          await fetch(`/api/timers/${this.timerId}/recipients`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contactId: contact.id,
+              deviceId, // or null for all devices for this contact
+            })
+          });
         }
-      } else {
-        this.localRecipients.push({
-          contactId: contact.id,
-          contactName: contact.name,
-          devices: validDevices.map(device => ({ ...device }))
-        });
+
+        // 3. After adding, fetch the current recipient list from the backend (source of truth)
+        const resp = await fetch(`/api/timers/${this.timerId}/recipients`);
+        const recipients = await resp.json();
+
+        // 4. Emit the new recipients array to the parent (for UI display)
+        this.$emit('recipients-change', recipients);
+
+        // 5. Reset selections for next use
+        this.selectedContactId = '';
+        this.selectedDeviceIds = [];
+      } catch (error) {
+        console.error('Failed to add recipient:', error);
+        // Optionally: show an error to the user here
       }
-
-      // Remove any duplicate recipient for this contactId, merging devices if needed
-      this.localRecipients = this.localRecipients.reduce((acc, recipientObj) => {
-        const found = acc.find(existing => existing.contactId === recipientObj.contactId);
-        if (!found) {
-          acc.push(recipientObj);
-        } else {
-          // Merge devices
-          const existingIds = new Set(found.devices.map(device => String(device.id)));
-          const mergedDevices = [
-            ...found.devices,
-            ...recipientObj.devices.filter(device => !existingIds.has(String(device.id)))
-          ];
-          found.devices = mergedDevices;
-        }
-        return acc;
-      }, []);
-
-      // Force reactivity
-      this.localRecipients = [...this.localRecipients];
-
-      // Reset selections
-      this.selectedContactId = '';
-      this.selectedDeviceIds = [];
-
-      console.log("Emitting recipients:", JSON.stringify(this.localRecipients, null, 2));
-      this.$emit('recipients-change', JSON.parse(JSON.stringify(this.localRecipients)));
     },
     // Remove a device from a recipient
     removeDevice(contactId, deviceId) {

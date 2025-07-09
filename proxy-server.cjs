@@ -170,6 +170,23 @@ router.get('/example/:device/status', (req, res) => {
   res.json({ Status: { Power: state } });
 });
 
+router.get('/example', (req, res) => {
+  try {
+    const raw = fs.readFileSync(DEVICES_PATH, 'utf-8');
+    const devices = JSON.parse(raw);
+
+    // If devices.json is an object: { deviceKey: { ... }, ... }
+    const exampleTasmota = Object.values(devices).filter(
+      d => d.type === 'tasmota' && d.example
+    );
+
+    res.json(exampleTasmota);
+  } catch (err) {
+    console.error('[GET /example] Failed to load devices:', err);
+    res.status(500).json({ error: 'Failed to load devices' });
+  }
+});
+
 // DEMO Timer endpoints (on/off/cancel logic)
 router.post('/example/:device/timer', (req, res) => {
   const { device } = req.params;
