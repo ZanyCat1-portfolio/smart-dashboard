@@ -14,6 +14,8 @@ logs
 .env.*
 
 cert/
+
+*.db
  
- my_notes.txt
+/my_notes
  build_images.sh

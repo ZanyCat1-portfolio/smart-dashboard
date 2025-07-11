@@ -75,7 +75,9 @@
 import AnimatedSwitch from './AnimatedSwitch.vue'
 import BaseDeviceCard from './BaseDeviceCard.vue' // REQUIRED for composition-based templates
 
+
 export default {
+
   name: 'TasmotaCard',
   components: { AnimatedSwitch, BaseDeviceCard },
   props: {

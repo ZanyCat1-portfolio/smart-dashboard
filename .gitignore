@@ -60,7 +60,9 @@ coverage/
 *.rar
 
 # Project-specific files
-my_notes.txt
+/my_notes
 build_images.sh
+
+*.db
 
 cert/
