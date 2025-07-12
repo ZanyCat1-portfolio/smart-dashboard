@@ -42,6 +42,7 @@ module.exports = (io) => {
 
   // Set, add to, or cancel a timer
   router.post('/example/:device/timer', (req, res) => {
+    console.log("what is demoTimers in example-tasmota-api.js: ", demoTimers)
       const { device } = req.params;
       const minutes = parseInt(req.body.minutes, 10);
       const deviceObj = getDevice(device);
@@ -53,6 +54,7 @@ module.exports = (io) => {
 
       // Cancel logic
       if (minutes === 0) {
+        console.log("did example-tasmota-api.js just cancel?", Date.now())
           if (demoTimers[device]?.timeout) clearTimeout(demoTimers[device].timeout);
           delete demoTimers[device];
           emitDemoStatus(deviceObj, 'off');

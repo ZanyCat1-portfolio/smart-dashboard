@@ -155,6 +155,7 @@ export default {
     this.cancelTimer   = timersApi.cancelTimer;
     this.fetchAndSync  = timersApi.fetchAndSync;
 
+
     await Promise.all(
       this.devices.map(async device => {
         await this.fetchStatus(device);

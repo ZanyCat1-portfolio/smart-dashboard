@@ -114,16 +114,6 @@ export default {
       this.localSwitchOn = newVal === 'on'
     }
   },
-
-  mounted() {
-    // console.log('TasmotaCard props:', {
-    //   timerState: this.timerState,
-    //   timerDisplay: this.timerDisplay,
-    //   onStartTimer: this.onStartTimer,
-    //   onAddToTimer: this.onAddToTimer,
-    //   onCancelTimer: this.onCancelTimer
-    // });
-  },
   methods: {
     async onOptimisticToggle(newSwitchState) {
       this.localSwitchOn = newSwitchState

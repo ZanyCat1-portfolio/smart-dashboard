@@ -52,6 +52,21 @@ function emitDemoStatus(device, state) {
   if (ioInstance) ioInstance.emit('device-status', { endpoint: device.endpoint, state });
 }
 
+function getCurrentDemoTimerStates() {
+  const out = {};
+  const now = Date.now();
+  for (const endpoint in demoTimers) {
+    const t = demoTimers[endpoint];
+    if (t && t.endTime && t.endTime > now) {
+      out[endpoint] = {
+        running: true,
+        endTime: t.endTime
+      };
+    }
+  }
+  return out;
+}
+
 module.exports = {
   DEVICES_PATH,
   loadDevices,
@@ -63,5 +78,6 @@ module.exports = {
   demoGoveeState,
   getDemoStatus,
   emitDemoStatus,
+  getCurrentDemoTimerStates,
   setIo
 };
