@@ -226,10 +226,10 @@ export default {
     getApiRoute(device, action) {
       if (device.example === true) {
         if (device.type === 'govee') {
-          return `${base}api/example-govee/example/govee/${device.endpoint}/${action}`;
+          return `${base}api/example-govee/${device.endpoint}/${action}`;
         }
         if (device.type === 'tasmota') {
-          return `${base}api/example-tasmota/example/${device.endpoint}/${action}`;
+          return `${base}api/example-tasmota/${device.endpoint}/${action}`;
         }
         return `${base}api/example/${device.endpoint}/${action}`;
       }
@@ -237,7 +237,7 @@ export default {
         return `${base}api/govee/${device.endpoint}/${action}`;
       }
       if (device.type === 'tasmota') {
-        return `${base}api/example/${device.endpoint}/${action}`;
+        return `${base}api/tasmota/${device.endpoint}/${action}`;
       }
     },
     async fetchStatus(device) {

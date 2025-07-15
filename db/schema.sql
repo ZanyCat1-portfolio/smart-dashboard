@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS smartTimers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     label TEXT NOT NULL,
     duration INTEGER NOT NULL, -- duration in seconds
+    initial_duration INTEGER NOT NULL,
     state TEXT NOT NULL,       -- e.g., 'pending', 'running', 'paused', 'canceled', 'finished'
     start_time DATETIME,
     end_time DATETIME,
@@ -44,7 +45,7 @@ CREATE TABLE IF NOT EXISTS recipients (
     type TEXT NOT NULL,  -- e.g., 'push', 'mqtt', 'ip'
     target TEXT,         -- for custom targets (e.g., IP address)
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(smartTimerId) REFERENCES smartTimers(id),
+    FOREIGN KEY(smartTimerId) REFERENCES smartTimers(id) ON DELETE CASCADE,
     FOREIGN KEY(deviceId) REFERENCES devices(id),
     FOREIGN KEY(userId) REFERENCES users(id)
 );

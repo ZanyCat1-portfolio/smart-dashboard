@@ -1,15 +1,37 @@
 const express = require('express');
 const userDAL = require('../../dal/user-dal');
+const deviceDAL = require('../../dal/device-dal');
 const User = require('../../models/User');
 
+// /api/users due to proxy-server.cjs and index.js .use statements
 module.exports = (io) => {
 
   const router = express.Router();
   
   // Register a new user
-  router.post('/', async (req, res) => {
+  router.post('/', (req, res) => {
+    const { username, email } = req.body;
+
+    // Basic validation
+    if (!username || typeof username !== 'string' || !username.trim()) {
+      return res.status(400).json({ error: 'username (string) required' });
+    }
+    // (optional) Validate email format here if you want
+
+    // Uniqueness enforcement
+    const existingUser = userDAL.getUserByUsername(username);
+    if (existingUser) {
+      return res.status(409).json({ error: 'Username already exists', user: existingUser });
+    }
+    if (email) {
+      const existingEmail = userDAL.getUserByEmail(email);
+      if (existingEmail) {
+        return res.status(409).json({ error: 'Email already exists', user: existingEmail });
+      }
+    }
+
     try {
-      const user = await userDAL.createUser(req.body);
+      const user = userDAL.createUser({ username, email });
       res.status(201).json(user);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -17,13 +39,13 @@ module.exports = (io) => {
   });
   
   // List all users (optional: ?active=true|false)
-  router.get('/', async (req, res) => {
+  router.get('/', (req, res) => {
     try {
       let filter = {};
       if (typeof req.query.active !== 'undefined') {
         filter.active = req.query.active === 'true';
       }
-      const users = await userDAL.listUsers(filter);
+      const users = userDAL.listUsers(filter);
       res.json(users);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -31,20 +53,30 @@ module.exports = (io) => {
   });
   
   // Get user by id
-  router.get('/:id', async (req, res) => {
+  router.get('/:id', (req, res) => {
     try {
-      const user = await userDAL.getUserById(req.params.id);
+      const user = userDAL.getUserById(req.params.id);
       if (!user) return res.status(404).json({ error: 'Not found' });
       res.json(user);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // Get all devices for a user
+  router.get('/:id/devices', (req, res) => {
+    try {
+      const devices = deviceDAL.listDevicesByUser(req.params.id);
+      res.json(devices);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
   
   // Update user info (PATCH: username/email)
-  router.patch('/:id', async (req, res) => {
+  router.patch('/:id', (req, res) => {
     try {
-      const updated = await userDAL.updateUser(req.params.id, req.body);
+      const updated = userDAL.updateUser(req.params.id, req.body);
       res.json(updated);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -52,9 +84,9 @@ module.exports = (io) => {
   });
   
   // Deactivate user (soft delete)
-  router.patch('/:id/deactivate', async (req, res) => {
+  router.patch('/:id/deactivate', (req, res) => {
     try {
-      await userDAL.deactivateUser(req.params.id);
+      userDAL.deactivateUser(req.params.id);
       res.status(204).end();
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -62,9 +94,9 @@ module.exports = (io) => {
   });
   
   // Reactivate user
-  router.patch('/:id/activate', async (req, res) => {
+  router.patch('/:id/activate', (req, res) => {
     try {
-      await userDAL.activateUser(req.params.id);
+      userDAL.activateUser(req.params.id);
       res.status(204).end();
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -72,9 +104,9 @@ module.exports = (io) => {
   });
   
   // (Optional) Hard delete user
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', (req, res) => {
     try {
-      await userDAL.deleteUser(req.params.id);
+      userDAL.deleteUser(req.params.id);
       res.status(204).end();
     } catch (err) {
       res.status(500).json({ error: err.message });

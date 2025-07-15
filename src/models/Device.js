@@ -1,23 +1,16 @@
 class Device {
-  constructor({
-    id = null,
-    userId,
-    name,
-    type = null,           // e.g., 'phone', 'tablet', 'computer'
-    pushSubscription = null,
-    mqttTopic = null,
-    ipAddress = null,
-    createdAt = null
-  }) {
-    this.id = id;
-    this.userId = userId;
-    this.name = name;
-    this.type = type;
-    this.pushSubscription = pushSubscription;
-    this.mqttTopic = mqttTopic;
-    this.ipAddress = ipAddress;
-    this.createdAt = createdAt;
+  constructor(row) {
+    this.id = row.id;
+    this.userId = row.userId !== undefined ? row.userId : row.user_id;
+    this.name = row.name;
+    this.type = row.type || null;
+    // pushSubscription stored as JSON string; parse if present
+    this.pushSubscription = row.pushSubscription !== undefined
+      ? row.pushSubscription
+      : (row.push_subscription ? JSON.parse(row.push_subscription) : null);
+    this.mqttTopic = row.mqttTopic !== undefined ? row.mqttTopic : row.mqtt_topic;
+    this.ipAddress = row.ipAddress !== undefined ? row.ipAddress : row.ip_address;
+    this.createdAt = row.createdAt !== undefined ? row.createdAt : row.created_at;
   }
 }
-
 module.exports = Device;

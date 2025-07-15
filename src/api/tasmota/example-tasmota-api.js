@@ -2,6 +2,7 @@
 // sample router.get('/example/:device/status url in dev server:
 // https://localhost:5173/api/example-tasmota/example/fireplaceblowerfan/status)
 
+// /api/example-tasmota due to proxy-server.cjs and index.js .use statements
 const express = require('express');
 
 module.exports = (io) => {
@@ -15,7 +16,7 @@ module.exports = (io) => {
   // ───── Example Tasmota: Device Status Endpoints ─────
 
   // Get device ON/OFF status
-  router.get('/example/:device/status', (req, res) => {
+  router.get('/:device/status', (req, res) => {
     const deviceObj = getDevice(req.params.device);
     if (!deviceObj || !isDemo(deviceObj)) return res.status(404).json({ error: 'Unknown demo device' });
     const state = demoState[deviceObj.endpoint] || 'off';
@@ -23,8 +24,7 @@ module.exports = (io) => {
   });
 
   // List all example Tasmota devices
-  router.get('/example', (req, res) => {
-    console.log("BUT AM I EVEN HAPPENING?")
+  router.get('/', (req, res) => {
     try {
       const raw = fs.readFileSync(DEVICES_PATH, 'utf-8');
       const devices = JSON.parse(raw);
@@ -33,7 +33,7 @@ module.exports = (io) => {
       );
       res.json(exampleTasmota);
     } catch (err) {
-      console.error('[GET /example] Failed to load devices:', err);
+      console.error('[GET /] Failed to load devices:', err);
       res.status(500).json({ error: 'Failed to load devices' });
     }
   });
@@ -41,8 +41,7 @@ module.exports = (io) => {
   // ───── Example Tasmota: Timer Logic ─────
 
   // Set, add to, or cancel a timer
-  router.post('/example/:device/timer', (req, res) => {
-    console.log("what is demoTimers in example-tasmota-api.js: ", demoTimers)
+  router.post('/:device/timer', (req, res) => {
       const { device } = req.params;
       const minutes = parseInt(req.body.minutes, 10);
       const deviceObj = getDevice(device);
@@ -54,7 +53,6 @@ module.exports = (io) => {
 
       // Cancel logic
       if (minutes === 0) {
-        console.log("did example-tasmota-api.js just cancel?", Date.now())
           if (demoTimers[device]?.timeout) clearTimeout(demoTimers[device].timeout);
           delete demoTimers[device];
           emitDemoStatus(deviceObj, 'off');
@@ -91,7 +89,7 @@ module.exports = (io) => {
   });
 
   // Timer status: remaining time and power state
-  router.get('/example/:device/timer/status', (req, res) => {
+  router.get('/:device/timer/status', (req, res) => {
     const timer = demoTimers[req.params.device];
     const deviceObj = getDevice(req.params.device);
     const power =
@@ -105,7 +103,7 @@ module.exports = (io) => {
   // ───── Example Tasmota: Generic ON/OFF/TOGGLE/STATUS ─────
 
   const DEMO_ACTIONS = ['on', 'off', 'toggle', 'status'];
-  router.all('/example/:device/:action', (req, res) => {
+  router.all('/:device/:action', (req, res) => {
       const { device, action } = req.params;
       const deviceObj = getDevice(device);
       if (!deviceObj || !isDemo(deviceObj) || !DEMO_ACTIONS.includes(action.toLowerCase())) {

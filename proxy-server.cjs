@@ -10,6 +10,12 @@ const mqtt     = require('mqtt');
 const { Server } = require('socket.io');
 const { getCurrentDemoTimerStates } = require('./src/utils/apiHelpers');
 const fetch    = (...args) => import('node-fetch').then(({default: f}) => f(...args));
+const { publishSmartTimerState, subscribeSmartTimerTopics } = require('./src/utils/smartTimer-mqtt')
+const { logMqtt } = require('./src/utils/logger');
+
+
+// ---- New: Import SmartTimer DAL for DB operations (adjust path as needed)
+const smartTimerDAL = require('./src/dal/smartTimer-dal.js');
 
 // ───── Config & Helpers ─────
 
@@ -46,22 +52,29 @@ function devLog(...args) {
 const basePath        = process.env.BASE_PATH || '/';
 const normalizedBase  = basePath.endsWith('/') ? basePath : basePath + '/';
 
-// ───── MQTT Bridge (for Real Devices) ─────
+// ───── MQTT Bridge (for Real Devices & SmartTimers) ─────
 
 const MQTT_URL = process.env.MQTT_URL || 'mqtt://localhost:1883';
 const mqttClient = mqtt.connect(MQTT_URL, {
   username: process.env.MQTT_USER,
   password: process.env.MQTT_PASS,
 });
+subscribeSmartTimerTopics(mqttClient, io, smartTimerDAL)
 
-// MQTT subscribe error
+// ---- Existing device MQTT subscribe logic
 mqttClient.on('connect', () => {
-  devLog(`[MQTT] Connected to ${MQTT_URL}`);
+  logMqtt(`Connected to ${MQTT_URL}`);
   mqttClient.subscribe(
-    ['stat/+/RESULT','stat/+/POWER','tele/+/STATE'],
+    [
+      'stat/+/RESULT',
+      'stat/+/POWER',
+      'tele/+/STATE',
+      // --- New: Subscribe to SmartTimer control topics
+      'smarthome/smarttimer/+/command'
+    ],
     error => error
-      ? console.error('[MQTT] Subscribe error:', error)
-      : devLog('[MQTT] Subscribed to status topics')
+      ? logError('[MQTT] Subscribe error:', error)
+      : logMqtt('Subscribed to status and SmartTimer topics')
   );
 });
 
@@ -69,6 +82,7 @@ mqttClient.on('message', (topic, payload) => {
   const msg = payload.toString();
   let endpoint, state, m;
 
+  // ---- Existing Tasmota MQTT handling
   if ((m = topic.match(/^stat\/(.+?)\/RESULT$/))) {
     endpoint = m[1].toLowerCase();
     try { state = JSON.parse(msg).POWER.toLowerCase(); } catch {}
@@ -84,16 +98,53 @@ mqttClient.on('message', (topic, payload) => {
     devLog(`[MQTT] ${endpoint} → ${state}`);
     io.emit('device-status', { endpoint, state });
   }
+
+  // ---- New: Handle SmartTimer MQTT control topics
+  if (topic.startsWith('smarthome/smarttimer/')) {
+    const parts = topic.split('/');
+    const timerId = parts[2];
+    const action = parts[3]; // Should be "command"
+    let payloadObj = {};
+    try { payloadObj = JSON.parse(msg); } catch {}
+
+    devLog(`[MQTT][SmartTimer] Received command for timer ${timerId}:`, payloadObj);
+
+    // EXAMPLE: Handle supported commands from MQTT
+    // E.g. payload: { action: 'start', duration: 600 }
+    if (action === 'command' && payloadObj.action) {
+      switch (payloadObj.action) {
+        case 'start':
+          if (payloadObj.duration) {
+            smartTimerDAL.startTimer(timerId, payloadObj.duration);
+            io.emit('smart-timer-update', { id: timerId, state: 'running' });
+          }
+          break;
+        case 'cancel':
+          smartTimerDAL.cancelTimer(timerId);
+          io.emit('smart-timer-update', { id: timerId, state: 'canceled' });
+          break;
+        case 'pause':
+          smartTimerDAL.pauseTimer(timerId);
+          io.emit('smart-timer-update', { id: timerId, state: 'paused' });
+          break;
+        // Add more actions as needed
+      }
+    }
+  }
 });
 
+// ---- Existing: On connection, emit demo timer state
 io.on('connection', (socket) => {
-  const timers = getCurrentDemoTimerStates();
-  socket.emit('timer-snapshot', timers);
+  const demoTimers = getCurrentDemoTimerStates();
+  socket.emit('timer-snapshot', demoTimers);
+
+  const smartTimers = smartTimerDAL.getCurrentActiveSmartTimers();
+  socket.emit('smart-timer-snapshot', smartTimers);
 });
 
 // ───── All Routers from /src/api:  ─────
 const apiRouter = require('./src/api')(io);
-app.use(normalizedBase + 'api', apiRouter);
+app.use(normalizedBase + 'api', apiRouter); // gives /api to url
 
 // ───── Static File Serving & SPA Fallback ─────
 
@@ -117,3 +168,7 @@ const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
   devLog(`🚀 Dashboard + WS listening on port ${PORT} (base: ${normalizedBase})`);
 });
+
+module.exports = {
+  mqttClient
+}

@@ -1,5 +1,6 @@
 const express = require('express');
 
+// /api/example-govee due to proxy-server.cjs and index.js .use statements
 module.exports = (io) => {
     
     const router = express.Router();
@@ -8,7 +9,7 @@ module.exports = (io) => {
     
     // ───── EXAMPLE GOVEE DEVICE ROUTES ─────
     
-    router.all('/example/govee/:device/:action', (req, res) => {
+    router.all('/:device/:action', (req, res) => {
       const { device, action } = req.params;
       const deviceObj = getDevice(device);
       if (!deviceObj || deviceObj.type !== 'govee' || !isDemo(deviceObj) || !['on', 'off', 'toggle', 'status'].includes(action)) {
@@ -38,7 +39,7 @@ module.exports = (io) => {
     });
     
     // Demo Govee timer/status (expand as needed)
-    router.get('/example/govee/:device/timer/status', (req, res) => {
+    router.get('/:device/timer/status', (req, res) => {
       res.json({ running: false, power: demoGoveeState[req.params.device] || 'off' });
     });
     return router;

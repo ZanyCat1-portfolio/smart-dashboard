@@ -1,5 +1,6 @@
 const express = require('express');
 
+// /api/tasmota due to proxy-server.cjs and index.js .use statements
 module.exports = (io) => {
 
     const router = express.Router();
@@ -109,7 +110,6 @@ module.exports = (io) => {
     
     // Devices list endpoint (only verified devices)
     router.get('/devices', (req, res) => {
-        console.log("TRY DEVICES?")
       try {
           res.json(JSON.parse(fs.readFileSync(DEVICES_PATH, 'utf8')));
         } catch (error) {

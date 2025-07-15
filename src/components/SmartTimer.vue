@@ -4,7 +4,7 @@
     <!-- <h4>timer: {{ timer }}</h4> -->
     <button
       class="btn btn-primary"
-      :disabled="!timer.minutes || timer.minutes < 1"
+      :disabled="!inputMinutes || inputMinutes < 1"
       @click="onStartOrAdd"
     >
       {{ isTimerLive && timer.status === 'pending' || timer.status === 'paused' ? 'Start Timer' : 'Pause Timer' }}
@@ -13,7 +13,7 @@
       type="number"
       min="1"
       max="1440"
-      v-model.number="timer.minutes"
+      v-model.number="inputMinutes"
       class="form-control"
       style="width:80px"
       placeholder="Min"
@@ -37,9 +37,6 @@ import { formatDisplay, isLive } from '../utils/utils.js';
 export default {
   props: {
     timer: { type: Object, required: true },
-    // remaining: Number,
-    // display: String,
-    // initialMinutes: { type: Number, default: null }
   },
   computed: {
     formattedRemaining() {
@@ -53,44 +50,48 @@ export default {
     },
     isTimerLive() {
       return isLive(this.timer);
+    },
+    // For UI, always show minutes
+    timerMinutes() {
+      if (typeof this.timer.duration === 'number') {
+        return Math.round(this.timer.duration / 60);
+      }
+      return '';
     }
   },
   data() {
     return {
-      inputMinutes: this.initialMinutes
+      inputMinutes: null
     }
   },
   watch: {
-    // When the timer is created or updated while not running, sync the input to initialMinutes
-    initialMinutes(newVal) {
-      if (!this.running) {
-        this.inputMinutes = newVal
-      }
-    },
-    // When the running state changes, clear input on start, set to initialMinutes on stop/lapse/cancel
-    running(newVal) {
-      if (newVal) {
-        this.inputMinutes = ''      // blank on start/add
-      } else {
-        this.inputMinutes = this.initialMinutes // repopulate after stop/cancel
-      }
+    // Sync input when timer changes (if not running)
+    timer: {
+      handler(newVal) {
+        if (!this.isTimerLive && typeof newVal.duration === 'number') {
+          this.inputMinutes = Math.round(newVal.duration / 60);
+        }
+      },
+      immediate: true,
+      deep: true
     }
   },
   mounted() {
-    // Set input to initialMinutes only on mount (timer just created)
-    if (!this.running && this.initialMinutes != null) {
-      this.inputMinutes = this.initialMinutes
+    // On mount, set input to timer's minutes if available
+    if (typeof this.timer.duration === 'number') {
+      this.inputMinutes = Math.round(this.timer.duration / 60);
     }
   },
   methods: {
     onStartOrAdd() {
-      if (!this.running) {
-        this.$emit('start', this.inputMinutes)
+      if (!this.inputMinutes || this.inputMinutes < 1) return;
+      const durationSeconds = this.inputMinutes * 60;
+      if (!this.isTimerLive) {
+        this.$emit('start', durationSeconds)
       } else {
-        this.$emit('add', this.inputMinutes)
+        this.$emit('add', durationSeconds)
       }
-      // Always clear after start/add
-      this.inputMinutes = ''
+      this.inputMinutes = '';
     }
   }
 }

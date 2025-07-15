@@ -1,28 +1,18 @@
 const EventEmitter = require('events');
 
 class SmartTimer extends EventEmitter {
-  constructor({
-    id = null,
-    label,
-    duration,
-    state = 'pending',
-    startTime = null,
-    endTime = null,
-    createdAt = null,
-    updatedAt = null,
-    recipients = []
-  }) {
+  constructor(row) {
     super();
-    this.id = id;
-    this.label = label;
-    this.duration = duration; // in seconds
-    this.state = state;       // 'pending', 'running', 'paused', 'canceled', 'finished'
-    this.startTime = startTime;
-    this.endTime = endTime;
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
-    this.recipients = recipients; // Array of Recipient objects or IDs
-    this.remaining = duration; // Track remaining time (optional, can recalc from startTime)
+    this.id = row.id;
+    this.label = row.label;
+    this.duration = row.duration;
+    this.state = row.state || 'pending';
+    this.startTime = row.startTime !== undefined ? row.startTime : row.start_time;
+    this.endTime = row.endTime !== undefined ? row.endTime : row.end_time;
+    this.createdAt = row.createdAt !== undefined ? row.createdAt : row.created_at;
+    this.updatedAt = row.updatedAt !== undefined ? row.updatedAt : row.updated_at;
+    this.recipients = row.recipients || [];
+    this.remaining = this.duration; // Or recalc if you store in DB
   }
 
   start() {

@@ -28,6 +28,7 @@ export function useDeviceTimers({ socket, fetchTimerStatus, getApiRoute }) {
 
   async function startTimer(device, minutes = 5) {
     const endpoint = device.endpoint
+    console.log("starting timer")
     const url = getApiRoute(device, 'timer')
     const body = { minutes }
     try {
@@ -81,15 +82,17 @@ export function useDeviceTimers({ socket, fetchTimerStatus, getApiRoute }) {
 
   if (socket) {
     socket.on('timer-snapshot', (timers) => {
+      console.log("let's see timers inside 'timer-snapshot' listener: ", timers)
       Object.keys(timerStates).forEach(k => { delete timerStates[k]; });
       for (const endpoint in timers) {
         timerStates[endpoint] = timers[endpoint];
+        console.log("what is each endpoint? ", endpoint)
       }
     });
 
 
     socket.on('timer-update', ({ device, endTime, running, remainingMs }) => {
-      console.log("this is useDeviceTimers.js, reporting in", Date.now())
+      console.log("this is useDeviceTimers.js, reporting in with device: ", device)
       const endpoint = device
       if (!endpoint) return
 

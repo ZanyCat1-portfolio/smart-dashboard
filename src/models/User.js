@@ -1,17 +1,10 @@
 class User {
-  constructor({
-    id = null,
-    username,
-    email = null,
-    createdAt = null,
-    active = true
-  }) {
-    this.id = id;
-    this.username = username;
-    this.email = email;
-    this.createdAt = createdAt;
-    this.active = active;
+  constructor(row) {
+    this.id = row.id;
+    this.username = row.username;
+    this.email = row.email || null;
+    this.createdAt = row.createdAt !== undefined ? row.createdAt : row.created_at;
+    this.active = row.active !== undefined ? row.active : true;
   }
 }
-
 module.exports = User;

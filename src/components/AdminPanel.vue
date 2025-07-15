@@ -5,7 +5,7 @@
     </button>
     <h2>Admin Panel</h2>
     <div>
-      <h3>Contacts</h3>
+      <h3>Users</h3>
       <table class="table">
         <thead>
           <tr>
@@ -16,13 +16,13 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="contact in contacts" :key="contact.id">
-            <td>{{ contact.id }}</td>
-            <td>{{ contact.name }}</td>
+          <tr v-for="user in users" :key="user.id">
+            <td>{{ user.id }}</td>
+            <td>{{ user.name }}</td>
             <td>
               <ul>
-                <li v-for="device in contact.devices" :key="device.id">
-                  {{ device.device_name }} ({{ device.id }})
+                <li v-for="device in user.devices" :key="device.id">
+                  {{ device.name }} ({{ device.id }})
                   <button class="btn btn-sm btn-danger ms-2"
                     @click="deleteDevice(device.id)">
                     Delete Device
@@ -32,8 +32,8 @@
             </td>
             <td>
               <button class="btn btn-danger btn-sm"
-                @click="deleteContact(contact.id)">
-                Delete Contact
+                @click="deleteUser(user.id)">
+                Delete User
               </button>
             </td>
           </tr>
@@ -51,7 +51,7 @@
         <tbody>
           <tr v-for="device in devices" :key="device.id">
             <td>{{ device.id }}</td>
-            <td>{{ device.device_name }}</td>
+            <td>{{ device.name }}</td>
             <td>
               <button class="btn btn-sm btn-danger ms-2"
                 @click="deleteDevice(device.id)">
@@ -76,39 +76,37 @@ export default {
   name: 'AdminPanel',
   data() {
     return {
-      contacts: [],
+      users: [],
       devices: [],
     };
   },
   async mounted() {
-    await this.fetchContacts();
+    await this.fetchUsers();
     await this.fetchDevices();
   },
   methods: {
-    async fetchContacts() {
-      const res = await fetch('/api/contacts');
-      this.contacts = await res.json();
+    async fetchUsers() {
+      const res = await fetch('/api/users');
+      this.users = await res.json();
     },
     async fetchDevices() {
-      const res = await fetch('/api/contacts/devices')
+      const res = await fetch('/api/devices')
       this.devices = await res.json();
     },
-    async deleteContact(contactId) {
-      if (!confirm('Delete this contact and all its devices?')) return;
-      await fetch(`/api/contacts/${contactId}`, { method: 'DELETE' });
-      await this.fetchContacts();
+    async deleteUser(userId) {
+      if (!confirm('Delete this user and all its devices?')) return;
+      await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+      await this.fetchUsers();
       await this.fetchDevices();
     },
     async deleteDevice(deviceId) {
-      console.log("PRESSED DELETE BUTTON IN ADMIT PANEL")
-      await fetch(`/api/contacts/devices/${deviceId}`, { method: 'DELETE' });
+      await fetch(`/api/devices/${deviceId}`, { method: 'DELETE' });
       await this.fetchDevices();
     },
     // Remove timer from local array if not in DB
     async deleteTimer(timerId) {
-      const timer = this.timers.find(t => t.id === timerId);
-      await fetch(`/api/timers/${timerId}/cancel`, { method: 'POST' });
-      this.reloadTimers();    
+      await fetch(`/api/smart-timers/${timerId}/cancel`, { method: 'POST' });
+      this.reloadTimers();
     }
   },
 };

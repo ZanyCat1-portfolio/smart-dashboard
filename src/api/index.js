@@ -1,3 +1,5 @@
+// all urls start with /api due to proxy-server.cjs app.use statement
+
 module.exports = (io) => {
     const express = require('express');
     const router = express.Router();

@@ -15,12 +15,11 @@ const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
 db.exec(schema);
 
-// Export a simple async/await wrapper for compatibility
 module.exports = {
   db,
 
   // Convenience async helpers for DALs
-  run: (...args) => Promise.resolve(db.prepare(args[0]).run(args.slice(1))),
-  get: (...args) => Promise.resolve(db.prepare(args[0]).get(args.slice(1))),
-  all: (...args) => Promise.resolve(db.prepare(args[0]).all(args.slice(1))),
+  run: (...args) => db.prepare(args[0]).run(...args.slice(1)),
+  get: (...args) => db.prepare(args[0]).get(...args.slice(1)),
+  all: (...args) => db.prepare(args[0]).all(...args.slice(1)),
 };

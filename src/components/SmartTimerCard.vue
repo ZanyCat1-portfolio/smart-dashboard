@@ -1,12 +1,12 @@
 <template>
   <BaseDeviceCard
-    :label="timer.name || 'Timer'"
+    :label="timer.label || 'Timer'"
     :verified="true"
     deviceType="timer"
     icon="bi-alarm"
   >
     <template #actions>
-      <Timer
+      <SmartTimer
         :timer="timer"
         @start="startTimer"
         @add="startTimer"
@@ -14,7 +14,7 @@
       />
       <RecipientsSelector
         :timer-id="timer.id"
-        :contacts="contacts"
+        :users="users"
         :recipients="timer.recipients || []"
         @recipients-change="onRecipientsChange"
       />
@@ -24,16 +24,16 @@
 
 <script>
 import BaseDeviceCard from './BaseDeviceCard.vue'
-import Timer from './Timer.vue'
+import SmartTimer from './SmartTimer.vue'
 import RecipientsSelector from './RecipientsSelector.vue'
 import { isLive } from '../utils/utils.js'
 
 export default {
-  name: 'TimerCard',
-  components: { BaseDeviceCard, Timer, RecipientsSelector },
+  name: 'SmartTimerCard',
+  components: { BaseDeviceCard, SmartTimer, RecipientsSelector },
   props: {
     timer: { type: Object, required: true },
-    contacts: { type: Array, required: true }
+    users: { type: Array, required: true }
   },
   data() {
     return {
@@ -43,42 +43,36 @@ export default {
   },
   methods: {
     resetInterval() {
-      console.log('[resetInterval] called, running:', this.isTimerLive, 'localRemaining:', this.localRemaining)
       if (this.intervalId) clearInterval(this.intervalId);
       if (!this.isTimerLive) return;
       this.intervalId = setInterval(() => {
         if (this.localRemaining > 0) {
           this.localRemaining -= 1;
-          console.log('[interval] localRemaining:', this.localRemaining)
         }
       }, 1000);
     },
     onRecipientsChange(newRecipients) {
       this.$emit('update-recipients', newRecipients)
     },
-    async startTimer() {
-      console.log('[startTimer] sending POST with minutes:', this.timer.minutes)
-      const resp = await fetch(`/api/timers/${this.timer.id}/start`, {
+    async startTimer(duration) {
+      // duration is now passed from SmartTimer as seconds!
+      const resp = await fetch(`/api/smart-timer/${this.timer.id}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ minutes: this.timer.minutes })
+        body: JSON.stringify({ duration }) // always in seconds
       });
       const data = await resp.json();
-      console.log('[startTimer] response:', data)
       this.$emit('refresh');
     },
     async cancelTimer() {
-      console.log('[cancelTimer] sending POST')
-      const resp = await fetch(`/api/timers/${this.timer.id}/cancel`, { method: 'POST' });
+      const resp = await fetch(`/api/smart-timer/${this.timer.id}/cancel`, { method: 'POST' });
       const data = await resp.json();
-      console.log('[cancelTimer] response:', data)
       this.$emit('refresh');
     }
   },
   watch: {
     'timer.remaining': {
       handler(newVal) {
-        console.log('[watch:timer.remaining] newVal:', newVal)
         this.localRemaining = newVal;
         this.resetInterval();
       },

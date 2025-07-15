@@ -3,8 +3,8 @@
     <h2>Register This Device</h2>
     <form @submit.prevent="registerDevice">
       <div>
-        <label>Contact Name</label>
-        <input v-model="contactName" required>
+        <label>User Name</label>
+        <input v-model="userName" required>
       </div>
       <div>
         <label>Device Name</label>
@@ -25,7 +25,6 @@
     Device is already registered on this browser.
   </div>
   
-
   <div v-if="alreadyRegistered" class="device-unregister">
     <p>This device is registered as: <b>{{ registeredAs }}</b></p>
     <button class="btn btn-danger" @click="unregisterDevice" :disabled="unregistering">
@@ -41,7 +40,7 @@ export default {
   emits: ['deviceUnregistered'],
   data() {
     return {
-      contactName: '',
+      userName: '',
       deviceName: '',
       isPublic: false,
       registering: false,
@@ -55,18 +54,17 @@ export default {
     try {
       // 1. Get the push subscription for this browser
       const subscription = await this.getPushSubscription();
-      
       const endpoint = subscription.endpoint;
       // 2. Query backend for this device
-      const res = await fetch('/api/contacts/find-device', {
+      const res = await fetch('/api/devices/find', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endpoint })
       });
       if (res.ok) {
-        const info = await res.json();
-        if (info && info.contactName && info.deviceName) {
-          this.registeredAs = `${info.contactName} / ${info.deviceName}`;
+        const device = await res.json();
+        if (device && device.name) {
+          this.registeredAs = device.name;
           this.alreadyRegistered = true;
         } else {
           this.registeredAs = '';
@@ -89,16 +87,20 @@ export default {
       this.success = false;
       this.registering = true;
       try {
+        // If you only have userName, you need to resolve it to userId
+        const userId = await this.resolveUserIdByName(this.userName);
+        if (!userId) throw new Error('User not found. Please ensure the user exists.');
+
         const subscription = await this.getPushSubscription();
         const platform = navigator.userAgent || "unknown";
 
-        const res = await fetch('/api/contacts/register', {
+        const res = await fetch('/api/devices', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
-            contactName: this.contactName,
-            deviceName: this.deviceName,
-            subscription,
+            userId,
+            name: this.deviceName,
+            pushSubscription: subscription,
             isPublic: this.isPublic,
             platform
           })
@@ -107,29 +109,21 @@ export default {
         if (!res.ok) throw new Error(result.error || 'Failed to register');
         this.success = true;
 
-        // Get registered contact and device info from response
-        const registeredContact = result.contact;
-        // Find the new device (by subscription endpoint or last in array)
-        let registeredDevice = registeredContact.devices.find(
-          d => d.subscription && d.subscription.endpoint === subscription.endpoint
-        );
-        // Fallback: last device
-        if (!registeredDevice) {
-          registeredDevice = registeredContact.devices[registeredContact.devices.length - 1];
-        }
+        // Get registered user and device info from response
+        const registeredUser = result.user;
+        const registeredDevice = result.device;
 
         // Save to localStorage for unregister
-        if (registeredContact && registeredDevice) {
+        if (registeredUser && registeredDevice) {
           localStorage.setItem('registeredDevice', JSON.stringify({
-            contactId: registeredContact.id,
+            userId: registeredUser.id,
             deviceId: registeredDevice.id,
-            contactName: registeredContact.name,
+            userName: registeredUser.name,
             deviceName: registeredDevice.name
           }));
-          this.registeredAs = `${registeredContact.name} (${registeredDevice.name})`;
+          this.registeredAs = `${registeredUser.name} (${registeredDevice.name})`;
           this.alreadyRegistered = true;
         } else {
-          // If for any reason the response is malformed
           this.error = 'Failed to save device registration info.';
         }
       } catch (error) {
@@ -141,23 +135,20 @@ export default {
     async unregisterDevice() {
       this.error = null;
       try {
-        
-        // Retrieve contactId and deviceId from localStorage (or component state)
+        // Retrieve userId and deviceId from localStorage (or component state)
         const registered = JSON.parse(localStorage.getItem('registeredDevice'));
-        if (registered && registered.contactId && registered.deviceId) {
-          await fetch(`/api/contacts/${registered.contactId}/devices/${registered.deviceId}`, {
-          // can we use base? we need to define it
-          // await fetch(`${base}api/contacts/${registered.contactId}/devices/${registered.deviceId}`, {
+        if (registered && registered.userId && registered.deviceId) {
+          await fetch(`/api/devices/${registered.deviceId}`, {
             method: 'DELETE'
           });
         } else {
-          throw new Error('Missing contact or device ID');
+          throw new Error('Missing user or device ID');
         }
         // Remove from localStorage and update state/UI
         localStorage.removeItem('registeredDevice');
         this.registeredAs = '';
-        this.alreadyRegistered = false;u
-        this.$emit('device-unregistered');
+        this.alreadyRegistered = false;
+        this.$emit('deviceUnregistered');
       } catch (error) {
         this.error = 'Failed to unregister device.';
       }
@@ -168,7 +159,6 @@ export default {
       
       // Use the same registration as in main.js
       const swReg = await navigator.serviceWorker.ready;
-      console.log("THIS LOG NEVER APPEARS")
 
       // Request notification permission
       const permission = await Notification.requestPermission();
@@ -179,7 +169,6 @@ export default {
       if (!resp.ok) throw new Error('Failed to get VAPID key');
       const publicVapidKey = await resp.text();
 
-      // Helper to decode base64url
       function urlBase64ToUint8Array(base64String) {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
         const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
@@ -195,18 +184,13 @@ export default {
       return subscription;
     },
 
-    // Deprecated: handleDeviceRegister, kept for future expansion or refactor
-    async handleDeviceRegister(form) {
-      // form: { contactName, deviceName, isPublic, platform }
-      const subscription = await this.getPushSubscription();
-      await fetch('/api/contacts/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          subscription,
-        }),
-      });
+    // Utility: resolve user name to userId
+    async resolveUserIdByName(name) {
+      // This method fetches all users and returns the id for the first matching name.
+      const res = await fetch('/api/users');
+      const users = await res.json();
+      const user = users.find(u => u.name === name);
+      return user ? user.id : null;
     }
   }
 }
