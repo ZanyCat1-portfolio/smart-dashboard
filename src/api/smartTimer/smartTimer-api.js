@@ -6,8 +6,11 @@ const eventBus = require('../../utils/eventBus');
 const { mqttClient } = require('../../../proxy-server.cjs');
 const { publishSmartTimerState } = require('../../../src/utils/smartTimer-mqtt');
 const { exportHistoricTimersToCSV } = require('../../utils/export');
-const { sendPushToRecipients } = require('../../../src/notifications/push');
 
+// In-memory timers object
+const timers = {}; // timerId: timer
+
+// /api/smart-timers due to proxy-server.cjs and index.js use statements
 const activeTimerTimeouts = {}; // timerId: timeoutId
 
 // ----- Timeout Helpers -----
@@ -39,32 +42,136 @@ function clearTimerTimeout(timerId) {
 // Call when timer finishes (timeout or manual)
 async function finishTimerAndNotify(timerId, isLate = false) {
   clearTimerTimeout(timerId);
-  const timer = smartTimerDAL.finishTimer(timerId); // marks as finished
+  const timer = finishTimer(timerId); // update in-mem and DB
   if (timer) {
     eventBus.emit('timer:finished', timer);
     publishSmartTimerState(mqttClient, timer);
-    const recipients = recipientDAL.getRecipientsForTimer(timer.id);
-    const payload = { type: 'timerFinished', timer, isLate };
-    await sendPushToRecipients(recipients, payload);
   }
 }
 
-// Rehydrate timers on server start
-function rehydrateRunningTimersOnStartup() {
-  const runningTimers = smartTimerDAL.listSmartTimersByState('running');
-  runningTimers.forEach(timer => {
-    const msUntilEnd = new Date(timer.endTime) - Date.now();
-    if (msUntilEnd > 0) {
-      scheduleTimerFinish(timer);
-    } else {
-      finishTimerAndNotify(timer.id, true); // Mark late timers as finished immediately
+// ---- IN-MEMORY UTILS ----
+function addOrUpdateTimer(timer) {
+  timers[timer.id] = timer;
+}
+function deleteTimer(timerId) {
+  delete timers[timerId];
+}
+
+// --- HYDRATE TIMERS ON STARTUP ---
+function rehydrateTimersOnStartup() {
+  const allTimers = smartTimerDAL.listAllSmartTimers();
+  allTimers.forEach(timer => {
+    timers[timer.id] = timer;
+    // Only process timers that are running AND have an endTime
+    if (timer.state === 'running' && timer.endTime) {
+      const msUntilEnd = new Date(timer.endTime) - Date.now();
+      if (msUntilEnd > 0) {
+        scheduleTimerFinish(timer);
+      } else {
+        finishTimerAndNotify(timer.id, true); // Mark late timers as finished immediately
+      }
     }
   });
+  eventBus.emit('smartTimers:snapshot', Object.values(timers))
+}
+
+// CRUD utils using in-mem first, then DAL for persistence
+function getTimerById(id) {
+  return timers[id] || null;
+}
+
+function createTimer({ label, duration }) {
+  const timer = smartTimerDAL.createSmartTimer({ label, duration });
+  addOrUpdateTimer(timer);
+  return timer;
+}
+
+function updateTimer(id, updates) {
+  const updated = smartTimerDAL.updateSmartTimer(id, updates);
+  addOrUpdateTimer(updated);
+  return updated;
+}
+
+function startTimer(id, duration) {
+  const timer = getTimerById(id);
+  if (!timer) return null;
+  let startTime = new Date();
+  let endTime = new Date(startTime.getTime() + (duration * 1000));
+  let updated = updateTimer(id, {
+    state: 'running',
+    duration,
+    start_time: startTime.toISOString(),
+    end_time: endTime.toISOString()
+  });
+  addOrUpdateTimer(updated);
+  scheduleTimerFinish(updated);
+  return updated;
+}
+
+function pauseTimer(id) {
+  const timer = getTimerById(id);
+  if (!timer || timer.state !== 'running') return timer;
+  const now = new Date();
+  const end = new Date(timer.endTime).getTime();
+  const remaining = Math.max(0, Math.floor((end - now) / 1000));
+  const updated = updateTimer(id, {
+    state: 'paused',
+    duration: remaining,
+    end_time: null
+  });
+  clearTimerTimeout(id);
+  return updated;
+}
+
+function unpauseTimer(id) {
+  const timer = getTimerById(id);
+  if (!timer || timer.state !== 'paused') return timer;
+  const now = Date.now();
+  const newEndTime = new Date(now + (timer.duration * 1000)).toISOString();
+  const updated = updateTimer(id, {
+    state: 'running',
+    end_time: newEndTime
+  });
+  scheduleTimerFinish(updated);
+  return updated;
+}
+
+function addTimeToTimer(id, seconds) {
+  const timer = getTimerById(id);
+  if (!timer) return null;
+  const newDuration = timer.duration + Number(seconds);
+  const updated = updateTimer(id, { duration: newDuration });
+  // If timer is running, recalculate end_time and reschedule
+  if (updated.state === 'running' && updated.end_time) {
+    let msLeft = new Date(updated.end_time) - Date.now();
+    let newEnd = new Date(Date.now() + msLeft + seconds * 1000).toISOString();
+    updateTimer(id, { end_time: newEnd });
+    updated.end_time = newEnd;
+    scheduleTimerFinish(updated);
+  }
+  return updated;
+}
+
+function cancelTimer(id) {
+  const updated = smartTimerDAL.cancelTimer(id);
+  addOrUpdateTimer(updated);
+  clearTimerTimeout(id);
+  return updated;
+}
+
+function finishTimer(id) {
+  const updated = smartTimerDAL.finishTimer(id);
+  addOrUpdateTimer(updated);
+  clearTimerTimeout(id);
+  return updated;
 }
 
 // Export function so you can call it from server startup if needed
 module.exports = (io) => {
   const router = express.Router();
+
+  // ---- HYDRATE IN-MEMORY DB ON STARTUP ----
+  rehydrateTimersOnStartup();
 
   // --- Timer Endpoints ---
 
@@ -77,7 +184,8 @@ module.exports = (io) => {
       return res.status(400).json({ error: 'Timer duration (seconds) required' });
     }
     try {
-      const timer = smartTimerDAL.createSmartTimer({ label, duration });
+      const timer = createTimer({ label, duration });
+      eventBus.emit('timer:created', timer);
       res.status(201).json(timer);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -87,13 +195,16 @@ module.exports = (io) => {
   router.get('/', (req, res) => {
     try {
       const { state } = req.query;
-      let timers;
+      let allTimers = Object.values(timers);
+      let result;
       if (state) {
-        timers = smartTimerDAL.listSmartTimersByState(state);
+        // state can be comma-separated
+        const states = state.split(',');
+        result = allTimers.filter(t => states.includes(t.state));
       } else {
-        timers = smartTimerDAL.listAllSmartTimers();
+        result = allTimers;
       }
-      res.json(timers);
+      res.json(result);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -102,8 +213,10 @@ module.exports = (io) => {
   router.get('/export', (req, res) => {
     try {
       const before = req.query.before;
+      // Use in-mem for historic timers
+      const historic = Object.values(timers).filter(t => t.state === 'finished' || t.state === 'canceled');
       const csv = exportHistoricTimersToCSV(
-        before ? smartTimerDAL.listHistoricSmartTimers({ before }) : smartTimerDAL.listHistoricSmartTimers()
+        before ? historic.filter(t => new Date(t.updatedAt) < new Date(before)) : historic
       );
       res.header('Content-Type', 'text/csv');
       res.header('Content-Disposition', `attachment; filename="historic-timers.csv"`);
@@ -115,7 +228,7 @@ module.exports = (io) => {
 
   router.get('/:id', (req, res) => {
     try {
-      const timer = smartTimerDAL.getSmartTimerById(req.params.id);
+      const timer = getTimerById(req.params.id);
       if (!timer) return res.status(404).json({ error: 'Not found' });
       res.json(timer);
     } catch (err) {
@@ -127,25 +240,18 @@ module.exports = (io) => {
   router.post('/:id/start', async (req, res) => {
     try {
       const { duration } = req.body;
-      let timer = smartTimerDAL.getSmartTimerById(req.params.id);
+      let timer = getTimerById(req.params.id);
 
       if (!timer) return res.status(404).json({ error: 'Not found' });
 
       if (typeof duration === 'number' && duration > 0) {
-        timer = smartTimerDAL.startTimer(timer.id, duration);
+        timer = startTimer(timer.id, duration);
       } else {
-        timer = smartTimerDAL.startTimer(timer.id, timer.duration);
+        timer = startTimer(timer.id, timer.duration);
       }
-
-      // Schedule finish timeout
-      scheduleTimerFinish(timer);
 
       eventBus.emit('timer:started', timer);
       publishSmartTimerState(mqttClient, timer);
-
-      const recipients = recipientDAL.getRecipientsForTimer(timer.id);
-      const payload = { type: 'timerStarted', timer };
-      await sendPushToRecipients(recipients, payload);
 
       res.json(timer);
     } catch (err) {
@@ -156,26 +262,29 @@ module.exports = (io) => {
   // Pause timer (clears timeout)
   router.post('/:id/pause', async (req, res) => {
     try {
-      let timer = smartTimerDAL.getSmartTimerById(req.params.id);
+      let timer = getTimerById(req.params.id);
       if (!timer || timer.state !== 'running') return res.status(404).json({ error: 'Not running' });
 
-      // Calculate remaining time
-      const now = Date.now();
-      const end = new Date(timer.endTime).getTime();
-      const remaining = Math.max(0, Math.round((end - now) / 1000));
-      timer = smartTimerDAL.updateSmartTimer(timer.id, {
-        state: 'paused',
-        duration: remaining,
-        end_time: null
-      });
-      clearTimerTimeout(timer.id);
+      timer = pauseTimer(timer.id);
 
       eventBus.emit('timer:paused', timer);
       publishSmartTimerState(mqttClient, timer);
 
-      const recipients = recipientDAL.getRecipientsForTimer(timer.id);
-      const payload = { type: 'timerPaused', timer };
-      await sendPushToRecipients(recipients, payload);
+      res.json(timer);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/:id/unpause', async (req, res) => {
+    try {
+      let timer = getTimerById(req.params.id);
+      if (!timer || timer.state !== 'paused') return res.status(404).json({ error: 'Not paused' });
+
+      timer = unpauseTimer(timer.id);
+
+      eventBus.emit('timer:unpaused', timer);
+      publishSmartTimerState(mqttClient, timer);
 
       res.json(timer);
     } catch (err) {
@@ -187,23 +296,13 @@ module.exports = (io) => {
   router.post('/:id/add-time', async (req, res) => {
     try {
       const { seconds } = req.body;
-      let timer = smartTimerDAL.getSmartTimerById(req.params.id);
+      let timer = getTimerById(req.params.id);
       if (!timer) return res.status(404).json({ error: 'Not found' });
 
-      // Update duration
-      timer = smartTimerDAL.updateSmartTimer(timer.id, { duration: timer.duration + Number(seconds) });
-
-      // If timer is running, reschedule finish
-      if (timer.state === 'running') {
-        scheduleTimerFinish(timer);
-      }
+      timer = addTimeToTimer(timer.id, seconds);
 
       eventBus.emit('timer:addedTime', timer, Number(seconds));
       publishSmartTimerState(mqttClient, timer);
-
-      const recipients = recipientDAL.getRecipientsForTimer(timer.id);
-      const payload = { type: 'timerAddedTime', timer, seconds: Number(seconds) };
-      await sendPushToRecipients(recipients, payload);
 
       res.json(timer);
     } catch (err) {
@@ -214,14 +313,10 @@ module.exports = (io) => {
   // Cancel timer (clears timeout)
   router.post('/:id/cancel', async (req, res) => {
     try {
-      let timer = smartTimerDAL.cancelTimer(req.params.id);
-      clearTimerTimeout(timer.id);
+      let timer = cancelTimer(req.params.id);
 
       eventBus.emit('timer:canceled', timer);
       publishSmartTimerState(mqttClient, timer);
-      const recipients = recipientDAL.getRecipientsForTimer(timer.id);
-      const payload = { type: 'timerCanceled', timer };
-      await sendPushToRecipients(recipients, payload);
 
       res.json(timer);
     } catch (err) {
@@ -233,7 +328,7 @@ module.exports = (io) => {
   router.post('/:id/finish', async (req, res) => {
     try {
       await finishTimerAndNotify(req.params.id);
-      const timer = smartTimerDAL.getSmartTimerById(req.params.id);
+      const timer = getTimerById(req.params.id);
       res.json(timer);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -254,6 +349,7 @@ module.exports = (io) => {
     }
     try {
       const recipient = recipientDAL.addRecipientToTimer(timerId, { userId, deviceId, type, target });
+      eventBus.emit('recipients:updated', { timerId, recipient });
       res.status(201).json(recipient);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -262,8 +358,24 @@ module.exports = (io) => {
 
   // Remove recipient from timer
   router.delete('/:id/recipients/:recipientId', async (req, res) => {
+    const timerId = req.params.id;
+    const recipientId = req.params.recipientId;
     try {
-      recipientDAL.removeRecipient(req.params.recipientId);
+      // Find recipient (optional, for extra validation)
+      const recipient = recipientDAL.getRecipientById(recipientId);
+      if (!recipient) {
+        return res.status(404).json({ error: 'Recipient not found' });
+      }
+      if (String(recipient.smartTimerId || recipient.smarttimerid) !== String(timerId)) {
+        return res.status(400).json({ error: 'Recipient does not belong to this timer' });
+      }
+
+      // Remove recipient
+      recipientDAL.removeRecipient(recipientId);
+
+      // Emit event to update all clients
+      eventBus.emit('recipients:updated', { timerId });
+
       res.status(204).end();
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -274,6 +386,13 @@ module.exports = (io) => {
     try {
       const before = req.query.before;
       smartTimerDAL.pruneHistoricSmartTimers({ beforeDate: before });
+      // Also prune in-mem timers
+      for (const id in timers) {
+        const timer = timers[id];
+        if ((timer.state === 'finished' || timer.state === 'canceled') && (!before || new Date(timer.updatedAt) < new Date(before))) {
+          deleteTimer(id);
+        }
+      }
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -289,9 +408,6 @@ module.exports = (io) => {
       res.status(500).json({ error: err.message });
     }
   });
-
-  // ---- Rehydrate timers on API module load ----
-  rehydrateRunningTimersOnStartup();
 
   return router;
 }

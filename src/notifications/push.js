@@ -1,14 +1,23 @@
 const webpush = require('web-push');
 const { logError, logInfo } = require('../utils/logger');
+const deviceDAL = require('../dal/device-dal');
 
 async function sendPushToRecipients(recipients, payload) {
   if (!Array.isArray(recipients) || recipients.length === 0) return;
 
   for (const recipient of recipients) {
     switch (recipient.type) {
-      case 'webpush':
-        await sendWebPush(recipient, payload);
+      case 'webpush': {
+        // Look up the device to get its pushSubscription object
+        const device = deviceDAL.getDeviceById(recipient.deviceId);
+        if (device && device.pushSubscription && device.pushSubscription.endpoint) {
+          // Forward the actual pushSubscription as the "target"
+          await sendWebPush({ ...recipient, target: device.pushSubscription }, payload);
+        } else {
+          console.warn('Device not found or missing pushSubscription for deviceId:', recipient.deviceId);
+        }
         break;
+      }
       case 'email':
         await sendEmail(recipient, payload);
         break;

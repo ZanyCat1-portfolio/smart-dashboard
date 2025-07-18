@@ -6,73 +6,50 @@
     <div class="d-flex mb-2 gap-2">
       <select v-model="selectedUserId" class="form-select" style="max-width:200px;">
         <option disabled value="">Select User…</option>
-        <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
+        <option v-for="user in users" :key="user.id" :value="user.id">{{ user.username }}</option>
       </select>
       <template v-if="selectedUser">
         <div>
-          <span v-for="device in devicesForSelectedUser" :key="device.id" class="form-check form-check-inline">
+          <span
+            v-for="device in devicesForSelectedUser"
+            :key="device.id"
+            class="form-check form-check-inline"
+          >
             <input
               type="checkbox"
               class="form-check-input"
               :id="'device-' + device.id"
-              :checked="isDeviceAlreadyAdded(selectedUser.id, device.id) || selectedDeviceIds.includes(device.id)"
-              :disabled="isDeviceAlreadyAdded(selectedUser.id, device.id)"
+              :checked="recipientExistsForDevice(device.id)"
               @change="onDeviceCheckboxChange(device.id, $event)"
             >
             <label class="form-check-label" :for="'device-' + device.id">
-              {{ device.name || device.device_name || device.id }}
-              <span v-if="isDeviceAlreadyAdded(selectedUser.id, device.id)" class="text-muted" style="font-size:0.8em;">(already added)</span>
+              {{ device.name || device.id }}
+              <span v-if="recipientExistsForDevice(device.id)" class="text-muted" style="font-size:0.8em;">(added)</span>
             </label>
           </span>
-          <button class="btn btn-outline-success btn-sm ms-2"
-            :disabled="selectedDeviceIds.length === 0"
-            @click.prevent="addRecipient"
-          >Add</button>
         </div>
       </template>
     </div>
-    <ul class="list-group mt-2">
-      <li
-        v-for="recipient in localRecipients"
-        :key="recipient.userId"
-        class="list-group-item"
-      >
-        <span>
-          <b>{{ recipient.userName }}</b>:
-          <span
-            v-for="device in recipient.devices"
-            :key="device.id"
-            class="badge bg-primary ms-1"
-          >
-            {{ device.name || device.device_name || device.id }}
-            <button
-              class="btn btn-sm btn-close btn-close-white ms-2"
-              style="font-size:0.6em;vertical-align:middle;"
-              aria-label="Remove"
-              @click="removeDevice(recipient.userId, device.id)"
-              title="Remove device"
-            ></button>
-          </span>
-        </span>
-      </li>
-    </ul>
   </div>
 </template>
 
 <script>
+// Import socket.io client the same way you do elsewhere in your app
+import { io } from 'socket.io-client';
+const socket = io(window.location.origin, { path: '/socket.io', transports: ['websocket', 'polling'] });
+
 export default {
   name: 'RecipientsSelector',
   props: {
-    timerId: { type: [Number, String], required: true },
-    recipients: { type: Array, default: () => [] }
+    timerId: { type: [Number, String], required: true }
   },
   data() {
     return {
       users: [],
+      recipients: [],
       selectedUserId: '',
-      selectedDeviceIds: [],
-      localRecipients: [],
-      devicesForSelectedUser: []
+      devicesForSelectedUser: [],
+      loading: false
     }
   },
   computed: {
@@ -81,100 +58,78 @@ export default {
     }
   },
   watch: {
-    selectedUserId: {
-      immediate: true,
-      async handler(userId) {
-        if (userId) {
-          const res = await fetch(`/api/users/${userId}/devices`);
-          this.devicesForSelectedUser = await res.json();
-        } else {
-          this.devicesForSelectedUser = [];
-        }
+    async selectedUserId(userId) {
+      if (userId) {
+        const res = await fetch(`/api/users/${userId}/devices`);
+        this.devicesForSelectedUser = await res.json();
+      } else {
+        this.devicesForSelectedUser = [];
       }
-    },
-    recipients: {
-      immediate: true,
-      handler(newRecipients) {
-        this.localRecipients = Array.isArray(newRecipients) ? JSON.parse(JSON.stringify(newRecipients)) : [];
-      }
-    },
+    }
   },
   async mounted() {
-    // Fetch list of users
-    const res = await fetch('/api/users');
-    this.users = await res.json();
+    this.loading = true;
+    // Fetch users
+    const usersRes = await fetch('/api/users');
+    this.users = await usersRes.json();
+    // Fetch initial recipients
+    await this.fetchRecipients();
+
+    // Listen for real-time updates via socket.io
+    socket.on('smart-timer-update', this.handleSmartTimerUpdate);
+    this.loading = false;
+  },
+  beforeUnmount() {
+    socket.off('smart-timer-update', this.handleSmartTimerUpdate);
   },
   methods: {
-    syncSelectedDeviceIds() {
-      if (!this.selectedUser) {
-        this.selectedDeviceIds = [];
-        return;
-      }
-      this.selectedDeviceIds = this.selectedDeviceIds.filter(
-        deviceId => !this.isDeviceAlreadyAdded(this.selectedUser.id, deviceId)
+    async fetchRecipients() {
+      const res = await fetch(`/api/smart-timers/${this.timerId}/recipients`);
+      this.recipients = await res.json();
+    },
+    recipientExistsForDevice(deviceId) {
+      // Assumes each recipient in recipients has deviceId (may be string or number)
+      return this.recipients.some(r =>
+        String(r.deviceId) === String(deviceId) &&
+        String(r.userId) === String(this.selectedUserId)
       );
     },
-    isDeviceAlreadyAdded(userId, deviceId) {
-      const recipient = this.localRecipients.find(
-        rec => String(rec.userId) === String(userId)
-      );
-      const isAlreadyAdded = recipient && recipient.devices.some(device => String(device.id) === String(deviceId));
-      return isAlreadyAdded;
-    },
-    onDeviceCheckboxChange(deviceId, event) {
+    async onDeviceCheckboxChange(deviceId, event) {
+      const userId = this.selectedUserId;
+      if (!userId) return;
+      // Add
       if (event.target.checked) {
-        if (!this.selectedDeviceIds.includes(deviceId)) {
-          this.selectedDeviceIds.push(deviceId);
-        }
-      } else {
-        this.selectedDeviceIds = this.selectedDeviceIds.filter(id => id !== deviceId);
+        await fetch(`/api/smart-timers/${this.timerId}/recipients`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            deviceId,
+            type: 'webpush',
+            target: deviceId // placeholder, could be more specific if you use MQTT/email/etc later
+          })
+        });
+        // No local update! Wait for socket event to update recipients
       }
-    },
-    async addRecipient() {
-      if (!this.selectedUserId || this.selectedDeviceIds.length === 0) return;
-      const user = this.selectedUser;
-      if (!user || !user.id) return;
-
-      try {
-        for (const deviceId of this.selectedDeviceIds) {
-          const alreadyExists = this.recipients.some(
-            rec => rec.user_id == user.id && rec.device_id == deviceId
-          );
-          if (alreadyExists) continue;
-
-          await fetch(`/api/smart-timer/${this.timerId}/recipients`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: user.id,
-              deviceId,
-              type: 'push',        // Change if you have different types
-              target: deviceId     // Or user.email etc. if needed
-            })
-          });
-        }
-
-        // Refresh recipients from backend
-        const resp = await fetch(`/api/smart-timer/${this.timerId}/recipients`);
-        const recipients = await resp.json();
-
-        this.$emit('recipients-change', recipients);
-        this.selectedUserId = '';
-        this.selectedDeviceIds = [];
-      } catch (error) {
-        console.error('Failed to add recipient:', error);
-      }
-    },
-    removeDevice(userId, deviceId) {
-      const recipientIndex = this.localRecipients.findIndex(recipient => recipient.userId == userId);
-      if (recipientIndex !== -1) {
-        this.localRecipients[recipientIndex].devices = this.localRecipients[recipientIndex].devices.filter(
-          device => String(device.id) !== String(deviceId)
+      // Remove
+      else {
+        // Find the recipient entry to delete (match on userId/deviceId)
+        const rec = this.recipients.find(r =>
+          String(r.deviceId) === String(deviceId) &&
+          String(r.userId) === String(userId)
         );
-        if (this.localRecipients[recipientIndex].devices.length === 0) {
-          this.localRecipients.splice(recipientIndex, 1);
+        if (rec) {
+          await fetch(`/api/smart-timers/${this.timerId}/recipients/${rec.id}`, {
+            method: 'DELETE'
+          });
+          // No local update! Wait for socket event
         }
-        this.$emit('change', JSON.parse(JSON.stringify(this.localRecipients)));
+      }
+    },
+    handleSmartTimerUpdate(timer) {
+      if (String(timer.id) === String(this.timerId)) {
+        this.recipients = timer.recipients || [];
+        this.$emit('recipients-change', this.recipients);
       }
     }
   }
@@ -182,9 +137,7 @@ export default {
 </script>
 
 <style scoped>
-.btn-close {
-  font-size: 0.7rem;
-  vertical-align: middle;
-  margin-left: 0.5em;
+.form-check-inline {
+  margin-right: 10px;
 }
 </style>

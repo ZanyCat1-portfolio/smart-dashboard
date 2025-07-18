@@ -1,5 +1,6 @@
 <template>
-  <div v-if="!alreadyRegistered" class="device-registration">
+  <div v-if="!isRegistered" class="device-registration">
+    <!-- Registration Form (unchanged) -->
     <h2>Register This Device</h2>
     <form @submit.prevent="registerDevice">
       <div>
@@ -21,23 +22,31 @@
     <div v-if="success" class="text-success mt-3">Device registered successfully!</div>
     <div v-if="error" class="text-danger mt-3">{{ error }}</div>
   </div>
+
   <div v-else class="text-success mt-3">
     Device is already registered on this browser.
   </div>
-  
-  <div v-if="alreadyRegistered" class="device-unregister">
-    <p>This device is registered as: <b>{{ registeredAs }}</b></p>
+
+  <div v-if="isRegistered" class="device-unregister">
+    <p>
+      This device is registered as:
+      <b>{{ registeredAs }}</b>
+    </p>
     <button class="btn btn-danger" @click="unregisterDevice" :disabled="unregistering">
       Unregister Device
     </button>
     <div v-if="unregisterSuccess" class="text-success mt-3">Device unregistered!</div>
     <div v-if="unregisterError" class="text-danger mt-3">{{ unregisterError }}</div>
-    </div>
+  </div>
 </template>
 
 <script>
+import { computed } from 'vue';
 export default {
-  emits: ['deviceUnregistered'],
+  props: {
+    devicesApi: { type: Object, required: true },
+    usersApi: { type: Object, required: true }
+  },
   data() {
     return {
       userName: '',
@@ -46,16 +55,29 @@ export default {
       registering: false,
       success: false,
       error: null,
-      registeredAs: '',
-      alreadyRegistered: false
+      // registeredAs: '',
+      alreadyRegistered: false,
+      unregistering: false,
+      unregisterSuccess: false,
+      unregisterError: null
     };
+  },
+  computed: {
+    // Device composables maintains registration state
+    isRegistered() {
+      return !!this.devicesApi.currentDevice;
+    },
+    registeredAs() {
+      // Show device name, or fallback if not registered
+      return this.devicesApi.currentDevice?.name || 'FALLBACK HA'
+    }
   },
   async mounted() {
     try {
-      // 1. Get the push subscription for this browser
       const subscription = await this.getPushSubscription();
       const endpoint = subscription.endpoint;
-      // 2. Query backend for this device
+
+      // POST to /api/devices/find as before
       const res = await fetch('/api/devices/find', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -63,23 +85,24 @@ export default {
       });
       if (res.ok) {
         const device = await res.json();
-        if (device && device.name) {
-          this.registeredAs = device.name;
+        if (device && device.name && device.active) {
+          // Update the in-mem db, key by id
+          this.devicesApi.devices[device.id] = device;
           this.alreadyRegistered = true;
         } else {
-          this.registeredAs = '';
+          // Remove from in-mem if not active
+          if (device && device.id) delete this.devicesApi.devices[device.id];
           this.alreadyRegistered = false;
         }
       } else {
-        this.registeredAs = '';
         this.alreadyRegistered = false;
       }
     } catch (error) {
-      // Fallback to unregistered state
-      this.registeredAs = '';
       this.alreadyRegistered = false;
     }
   },
+
+
 
   methods: {
     async registerDevice() {
@@ -87,72 +110,64 @@ export default {
       this.success = false;
       this.registering = true;
       try {
-        // If you only have userName, you need to resolve it to userId
-        const userId = await this.resolveUserIdByName(this.userName);
-        if (!userId) throw new Error('User not found. Please ensure the user exists.');
-
-        const subscription = await this.getPushSubscription();
-        const platform = navigator.userAgent || "unknown";
-
-        const res = await fetch('/api/devices', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            userId,
-            name: this.deviceName,
-            pushSubscription: subscription,
-            isPublic: this.isPublic,
-            platform
-          })
-        });
-        const result = await res.json();
-        if (!res.ok) throw new Error(result.error || 'Failed to register');
-        this.success = true;
-
-        // Get registered user and device info from response
-        const registeredUser = result.user;
-        const registeredDevice = result.device;
-
-        // Save to localStorage for unregister
-        if (registeredUser && registeredDevice) {
-          localStorage.setItem('registeredDevice', JSON.stringify({
-            userId: registeredUser.id,
-            deviceId: registeredDevice.id,
-            userName: registeredUser.name,
-            deviceName: registeredDevice.name
-          }));
-          this.registeredAs = `${registeredUser.name} (${registeredDevice.name})`;
-          this.alreadyRegistered = true;
-        } else {
-          this.error = 'Failed to save device registration info.';
+        // You may need usersApi as a prop, or fetch userId here:
+        let user = await this.usersApi.getUserByUsername(this.userName);
+        console.log("What is user? getUserByUsername method returned null", user)
+        // If not found, create user
+        if (!user) {
+          console.log("Did below line fail?")
+          user = await this.usersApi.createUser(this.userName);
+          console.log("Did above line fail?")
+          if (!user || !user.id) throw new Error('Failed to create user');
         }
+        const pushSubscription = await this.getPushSubscription();
+
+        await this.devicesApi.registerDevice({
+          userId: user.id,
+          name: this.deviceName,
+          pushSubscription,
+          isPublic: this.isPublic,
+          platform: navigator.userAgent,
+        });
+
+        this.success = true;
       } catch (error) {
-        this.error = error.message;
+        console.log("Is this error happening?")
+        this.error = error.message || 'Registration failed.';
       } finally {
         this.registering = false;
       }
     },
     async unregisterDevice() {
       this.error = null;
+      this.unregistering = true;
+      this.unregisterSuccess = false;
+      this.unregisterError = null;
+
       try {
-        // Retrieve userId and deviceId from localStorage (or component state)
-        const registered = JSON.parse(localStorage.getItem('registeredDevice'));
-        if (registered && registered.userId && registered.deviceId) {
-          await fetch(`/api/devices/${registered.deviceId}`, {
-            method: 'DELETE'
-          });
-        } else {
-          throw new Error('Missing user or device ID');
-        }
-        // Remove from localStorage and update state/UI
-        localStorage.removeItem('registeredDevice');
+        // Get push subscription and endpoint
+        const subscription = await this.getPushSubscription();
+        const endpoint = subscription.endpoint;
+
+        // Use devicesApi to find the device by endpoint (you may want a helper in the composable)
+        const device = await this.devicesApi.findDeviceByEndpoint(endpoint);
+        if (!device || !device.id) throw new Error('Device not found');
+
+        // Use composable to deactivate device
+        await this.devicesApi.deactivateDevice(device.id);
+
+        // UI state only
         this.registeredAs = '';
         this.alreadyRegistered = false;
-        this.$emit('deviceUnregistered');
+        this.unregisterSuccess = true;
+        // No $emit here!
       } catch (error) {
-        this.error = 'Failed to unregister device.';
+        this.unregisterError = error.message || 'Failed to unregister device.';
+      } finally {
+        this.unregistering = false;
       }
     },
+
     async getPushSubscription() {
       if (!('serviceWorker' in navigator)) throw new Error('Service Worker not supported');
       if (!('PushManager' in window)) throw new Error('Push not supported in this browser');

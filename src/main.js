@@ -1,3 +1,11 @@
+import { io } from 'socket.io-client';
+window.addEventListener("DOMContentLoaded", () => {
+  const socket = io(); // import io from 'socket.io-client' at top
+  socket.onAny((event, ...args) => {
+    console.log("SOCKET EVENT:", event, args);
+  });
+});
+
 import 'bootstrap-icons/font/bootstrap-icons.css'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import 'bootstrap'
@@ -15,4 +23,8 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-createApp(App).mount('#app')
+const app = createApp(App);
+const vm = app.mount('#app');
+window.__vue_root__ = vm;
+
+

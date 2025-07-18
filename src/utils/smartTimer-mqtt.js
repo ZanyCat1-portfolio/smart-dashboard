@@ -20,6 +20,7 @@ function subscribeSmartTimerTopics(mqttClient, io, smartTimerDAL) {
 
   mqttClient.subscribe('smarthome/smarttimer/+/command', (err) => {
     if (err) logError('Failed to subscribe to SmartTimer command topics:', err);
+    console.log(process.env.NODE_ENV)
   });
 
   mqttClient.on('message', (topic, payload) => {

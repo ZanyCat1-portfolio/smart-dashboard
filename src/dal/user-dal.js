@@ -2,15 +2,20 @@ const db = require('../../db/db');
 const User = require('../models/User');
 
 const userDAL = {
-  createUser: (data) => {
-    const { username, email = null, active = true } = data;
+  createUser: ({ username, email }) => {
     const now = new Date().toISOString();
     const res = db.run(
-      `INSERT INTO users (username, email, created_at, active)
-       VALUES (?, ?, ?, ?)`,
-      [username, email, now, active ? 1 : 0]
+      `INSERT INTO users (username, email, active, created_at)
+       VALUES (?, ?, 1, ?)`,
+      username, email || null, now
     );
-    return { ...data, id: res.lastID, createdAt: now };
+    return {
+      id: res.lastInsertRowid,
+      username,
+      email: email || null,
+      active: true,
+      createdAt: now,
+    };
   },
 
   getUserById: (id) => {
@@ -19,22 +24,39 @@ const userDAL = {
   },
 
   getUserByUsername: (username) => {
-    const row = db.get(`SELECT * FROM users WHERE username = ?`, [username]);
-    return row ? new User(row) : null;
+    return db.get('SELECT * FROM users WHERE username = ?', [username]);
   },
 
-  // if no argument, lists all users. Otherwise lists active = true or active = false users
+  getUserByEmail: (email) => {
+    return db.get('SELECT * FROM users WHERE email = ?', [email]);
+  },
+
+  findUsersByName: (username) => {
+    return db.all(`
+      SELECT * FROM users
+      WHERE username LIKE '%' || ? || '%'
+      ORDER BY username ASC
+    `, [username]);
+  },
+
+  findUsersByExactUsername: (username) => {
+    return db.all(`
+      SELECT * FROM users WHERE LOWER(username) = LOWER(?)
+    `, [username]);
+  },
+
   listUsers: (filter = {}) => {
-    let sql = `SELECT * FROM users`;
-    const values = [];
-    if ('active' in filter) {
-      sql += ` WHERE active = ?`;
-      values.push(filter.active ? 1 : 0);
-    }
-    const rows = db.all(sql, values);
-    return rows.map(row => new User(row));
-  },
+    let sql = 'SELECT * FROM users';
+    const params = [];
 
+    if (typeof filter.active === 'boolean') {
+      sql += ' WHERE active = ?';
+      params.push(filter.active ? 1 : 0);
+    }
+
+    sql += ' ORDER BY username ASC';
+    return db.all(sql, params);
+  },
   updateUser: (id, updates) => {
     const fields = [];
     const values = [];

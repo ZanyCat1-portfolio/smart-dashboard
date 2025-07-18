@@ -16,7 +16,7 @@ const deviceDAL = {
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [userId, name, type, pushSubString, mqttTopic, ipAddress, now]
     );
-    return { ...data, id: res.lastID, createdAt: now };
+    return { ...data, id: res.lastInsertRowid, createdAt: now };
   },
 
   getDeviceById: (id) => {
@@ -41,9 +41,54 @@ const deviceDAL = {
     return null;
   },
 
+  // Find device by exact pushSubscription JSON string
+  findDeviceByPushSubscription: (pushSubscription) => {
+    // Convert input object/string to canonical JSON string for comparison
+    const targetJson = typeof pushSubscription === 'string'
+      ? pushSubscription
+      : JSON.stringify(pushSubscription);
+
+    const rows = db.all(`SELECT * FROM devices WHERE push_subscription IS NOT NULL`);
+    for (const row of rows) {
+      if (row.push_subscription === targetJson) {
+        return new Device(row);
+      }
+    }
+    return null;
+  },
+
+  // Update device active status and optionally name and userId
+  reactivateDevice: (id, updates) => {
+    const fields = [];
+    const values = [];
+    for (const key in updates) {
+      if (key === 'pushSubscription') {
+        fields.push(`push_subscription = ?`);
+        values.push(JSON.stringify(updates[key]));
+      } else if (key === 'active') {
+        fields.push(`active = ?`);
+        values.push(updates[key] ? 1 : 0);
+      } else {
+        fields.push(`${key} = ?`);
+        values.push(updates[key]);
+      }
+    }
+    values.push(id);
+    const sql = `UPDATE devices SET ${fields.join(', ')} WHERE id = ?`;
+    db.run(sql, values);
+    return deviceDAL.getDeviceById(id);
+  },
+
   listDevicesByUser: (userId) => {
-    const rows = db.all(`SELECT * FROM devices WHERE userId = ?`, [userId]);
+    const rows = db.all(`SELECT * FROM devices WHERE userId = ? AND active = 1`, [userId]);
     return rows.map(row => new Device(row));
+  },
+
+  findDevicesByUserIdAndName: (userId, name) => {
+    return db.all(
+      `SELECT * FROM devices WHERE userId = ? AND name = ? COLLATE NOCASE`,
+      [userId, name]
+    );
   },
 
   listAllDevices: () => {
@@ -58,6 +103,9 @@ const deviceDAL = {
       if (key === 'pushSubscription') {
         fields.push(`push_subscription = ?`);
         values.push(JSON.stringify(updates[key]));
+      } else if (key === 'active') {
+        fields.push(`active = ?`);
+        values.push(updates[key] ? 1 : 0);
       } else {
         fields.push(`${key} = ?`);
         values.push(updates[key]);
@@ -68,6 +116,7 @@ const deviceDAL = {
     db.run(sql, values);
     return deviceDAL.getDeviceById(id);
   },
+
 
   deleteDevice: (id) => {
     db.run(`DELETE FROM devices WHERE id = ?`, [id]);

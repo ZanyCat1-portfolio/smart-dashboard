@@ -23,7 +23,7 @@ const recipientDAL = {
       VALUES (?, ?, ?, ?, ?, ?)`,
       [timerId, deviceId, userId, type, target, now]
     );
-    return { ...recipientData, id: res.lastID, smartTimerId: timerId, createdAt: now };
+    return { ...recipientData, id: res.lastInsertRowid, smartTimerId: timerId, createdAt: now };
   },
 
   // Get all recipients for a timer

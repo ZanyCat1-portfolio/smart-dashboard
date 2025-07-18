@@ -1,6 +1,8 @@
 const db = require('../../db/db');
 const SmartTimer = require('../models/SmartTimer');
 
+const recipientDAL = require('./recipient-dal')
+
 const smartTimerDAL = {
 
   createSmartTimer: (data) => {
@@ -11,15 +13,30 @@ const smartTimerDAL = {
 
     const res = db.run(
       `INSERT INTO smartTimers (label, duration, initial_duration, state, start_time, end_time, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [label, duration, duration, state, safeStartTime, safeEndTime, now, now]
     );
-    return { ...data, id: res.lastID, createdAt: now, updatedAt: now };
+
+    // Return a timer object with ALL expected properties, using camelCase for frontend
+    return {
+      id: res.lastInsertRowid,
+      label,
+      duration,
+      state,
+      startTime: safeStartTime,
+      endTime: safeEndTime,
+      createdAt: now,
+      updatedAt: now,
+      // add other fields if needed (e.g., recipients: [])
+    };
   },
 
   getSmartTimerById: (id) => {
     const row = db.get(`SELECT * FROM smartTimers WHERE id = ?`, [id]);
-    return row ? new SmartTimer(row) : null;
+    if (!row) return null;
+    const timer = new SmartTimer(row);
+    timer.recipients = recipientDAL.getRecipientsForTimer(timer.id);
+    return timer;
   },
 
   listSmartTimersByState: (states) => {
@@ -30,20 +47,53 @@ const smartTimerDAL = {
     } else {
       rows = db.all(`SELECT * FROM smartTimers WHERE state = ?`, [states]);
     }
-    return rows.map(row => new SmartTimer(row));
-  },
-
-  getCurrentActiveSmartTimers: () => {
-    return smartTimerDAL.listSmartTimersByState(['running', 'pending', 'paused']);
-  },
-
-  listHistoricSmartTimers: () => {
-    return smartTimerDAL.listSmartTimersByState(['finished', 'canceled']);
+    return rows.map(row => {
+      const timer = new SmartTimer(row);
+      timer.recipients = recipientDAL.getRecipientsForTimer(timer.id);
+      return timer;
+    });
   },
 
   listAllSmartTimers: () => {
     const rows = db.all(`SELECT * FROM smartTimers`);
-    return rows.map(row => new SmartTimer(row));
+    return rows.map(row => {
+      const timer = new SmartTimer(row);
+      timer.recipients = recipientDAL.getRecipientsForTimer(timer.id);
+      return timer;
+    });
+  },
+
+  getCurrentActiveSmartTimers: () => {
+    const rows = db.all(`SELECT * FROM smartTimers WHERE active = 1`);
+    return rows.map(row => {
+      const timer = new SmartTimer(row);
+      timer.recipients = recipientDAL.getRecipientsForTimer(timer.id);
+      return timer;
+    });
+  },
+
+  listHistoricSmartTimers: () => {
+    const rows = db.all(`SELECT * FROM smartTimers WHERE active = 0`);
+    return rows.map(row => {
+      const timer = new SmartTimer(row);
+      timer.recipients = recipientDAL.getRecipientsForTimer(timer.id);
+      return timer;
+    });
+  },
+
+  listSmartTimersByState: (states) => {
+    let rows;
+    if (Array.isArray(states)) {
+      const placeholders = states.map(() => '?').join(',');
+      rows = db.all(`SELECT * FROM smartTimers WHERE state IN (${placeholders})`, states);
+    } else {
+      rows = db.all(`SELECT * FROM smartTimers WHERE state = ?`, [states]);
+    }
+    return rows.map(row => {
+      const timer = new SmartTimer(row);
+      timer.recipients = recipientDAL.getRecipientsForTimer(timer.id);
+      return timer;
+    });
   },
 
   updateSmartTimer: (id, updates) => {

@@ -22,6 +22,8 @@ const smartTimerDAL = require('./src/dal/smartTimer-dal.js');
 const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, { cors: { origin: '*' } });
+const eventBus = require('./src/utils/eventBus.js');
+eventBus.setIo(io);
 
 app.use(express.json());
 
@@ -51,6 +53,7 @@ function devLog(...args) {
 // ---- Base path config ----
 const basePath        = process.env.BASE_PATH || '/';
 const normalizedBase  = basePath.endsWith('/') ? basePath : basePath + '/';
+console.log("what is base path?:", process.env.BASE_PATH)
 
 // ───── MQTT Bridge (for Real Devices & SmartTimers) ─────
 
@@ -140,6 +143,14 @@ io.on('connection', (socket) => {
 
   const smartTimers = smartTimerDAL.getCurrentActiveSmartTimers();
   socket.emit('smart-timer-snapshot', smartTimers);
+
+    // Devices:
+  const devices = Object.values(require('./src/api/smartTimer/device-api').devices); // your in-mem devices
+  socket.emit('devices:snapshot', devices);
+
+  // Users:
+  const users = Object.values(require('./src/api/smartTimer/user-api').users); // your in-mem users
+  socket.emit('users:snapshot', users);
 });
 
 // ───── All Routers from /src/api:  ─────

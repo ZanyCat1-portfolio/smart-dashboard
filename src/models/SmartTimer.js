@@ -6,6 +6,7 @@ class SmartTimer extends EventEmitter {
     this.id = row.id;
     this.label = row.label;
     this.duration = row.duration;
+    this.initialDuration = row.initialDuration !== undefined ? row.initialDuration : row.initial_duration;
     this.state = row.state || 'pending';
     this.startTime = row.startTime !== undefined ? row.startTime : row.start_time;
     this.endTime = row.endTime !== undefined ? row.endTime : row.end_time;
@@ -13,7 +14,15 @@ class SmartTimer extends EventEmitter {
     this.updatedAt = row.updatedAt !== undefined ? row.updatedAt : row.updated_at;
     this.recipients = row.recipients || [];
     this.remaining = this.duration; // Or recalc if you store in DB
+
+    // Handle active field
+    if (row.active !== undefined) {
+      this.active = row.active === 1 || row.active === true || row.active === '1';
+    } else {
+      this.active = true;
+    }
   }
+
 
   start() {
     if (this.state !== 'pending' && this.state !== 'paused') return false;

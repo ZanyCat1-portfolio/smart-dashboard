@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS devices (
     mqtt_topic TEXT,
     ip_address TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    active BOOLEAN DEFAULT 1,
     FOREIGN KEY(userId) REFERENCES users(id)
 );
 
@@ -33,7 +34,8 @@ CREATE TABLE IF NOT EXISTS smartTimers (
     start_time DATETIME,
     end_time DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    active BOOLEAN DEFAULT 1
 );
 
 -- Recipients table (associates devices/users with timers)
@@ -45,7 +47,7 @@ CREATE TABLE IF NOT EXISTS recipients (
     type TEXT NOT NULL,  -- e.g., 'push', 'mqtt', 'ip'
     target TEXT,         -- for custom targets (e.g., IP address)
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(smartTimerId) REFERENCES smartTimers(id) ON DELETE CASCADE,
+    FOREIGN KEY(smartTimerId) REFERENCES smartTimers(id),
     FOREIGN KEY(deviceId) REFERENCES devices(id),
     FOREIGN KEY(userId) REFERENCES users(id)
 );
