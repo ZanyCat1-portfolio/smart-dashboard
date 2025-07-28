@@ -3,22 +3,7 @@ const userDAL = require('../../dal/user-dal');
 const deviceDAL = require('../../dal/device-dal');
 const User = require('../../models/User');
 const eventBus = require('../../utils/eventBus');
-
-// In-memory object
-let users = {};
-
-// Rehydrate users from DB at startup
-function rehydrateUsersOnStartup() {
-  const allUsers = userDAL.listUsers(); // get all from DB
-  users = {};
-  allUsers.forEach(user => {
-    users[user.id] = user;
-  });
-  eventBus.emit('users:snapshot', Object.values(users))
-}
-
-// Initial hydration
-rehydrateUsersOnStartup();
+const users = require('../../data/users');
 
 module.exports = (io) => {
   const router = express.Router();
