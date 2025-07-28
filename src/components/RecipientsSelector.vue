@@ -34,46 +34,48 @@
 </template>
 
 <script>
+import socket from '../composables/useSocket'
 // Import socket.io client the same way you do elsewhere in your app
-import { io } from 'socket.io-client';
-const socket = io(window.location.origin, { path: '/socket.io', transports: ['websocket', 'polling'] });
+// import { io } from 'socket.io-client';
+// const socket = io(window.location.origin, { path: '/socket.io', transports: ['websocket', 'polling'] });
+// const socket = io('https://192.168.4.23:8080', { 
+//   path: '/socket.io', 
+//   transports: ['websocket', 'polling'], 
+//   secure: true 
+// });
 
 export default {
   name: 'RecipientsSelector',
   props: {
-    timerId: { type: [Number, String], required: true }
+    timerId: { type: [Number, String], required: true },
+    users: { type: Array, required: true },
+    devices: { type: Array, required: true },
+    recipients: { type: Array, default: () => [] },
+    smartTimersApi: { type: Object, required: true }
   },
   data() {
     return {
-      users: [],
-      recipients: [],
       selectedUserId: '',
-      devicesForSelectedUser: [],
       loading: false
     }
   },
   computed: {
     selectedUser() {
       return this.users.find(user => user.id === this.selectedUserId);
-    }
-  },
-  watch: {
-    async selectedUserId(userId) {
-      if (userId) {
-        const res = await fetch(`/api/users/${userId}/devices`);
-        this.devicesForSelectedUser = await res.json();
-      } else {
-        this.devicesForSelectedUser = [];
-      }
+    },
+    devicesForSelectedUser() {
+      return this.devices.filter(
+        device => device.userId === this.selectedUserId && device.active
+      );
     }
   },
   async mounted() {
     this.loading = true;
     // Fetch users
-    const usersRes = await fetch('/api/users');
-    this.users = await usersRes.json();
+    // const usersRes = await fetch('/api/users');
+    // this.users = await usersRes.json();
     // Fetch initial recipients
-    await this.fetchRecipients();
+    // await this.fetchRecipients();
 
     // Listen for real-time updates via socket.io
     socket.on('smart-timer-update', this.handleSmartTimerUpdate);
@@ -83,10 +85,6 @@ export default {
     socket.off('smart-timer-update', this.handleSmartTimerUpdate);
   },
   methods: {
-    async fetchRecipients() {
-      const res = await fetch(`/api/smart-timers/${this.timerId}/recipients`);
-      this.recipients = await res.json();
-    },
     recipientExistsForDevice(deviceId) {
       // Assumes each recipient in recipients has deviceId (may be string or number)
       return this.recipients.some(r =>
@@ -97,19 +95,10 @@ export default {
     async onDeviceCheckboxChange(deviceId, event) {
       const userId = this.selectedUserId;
       if (!userId) return;
+      
       // Add
       if (event.target.checked) {
-        await fetch(`/api/smart-timers/${this.timerId}/recipients`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId,
-            deviceId,
-            type: 'webpush',
-            target: deviceId // placeholder, could be more specific if you use MQTT/email/etc later
-          })
-        });
-        // No local update! Wait for socket event to update recipients
+        await this.smartTimersApi.addRecipient(this.timerId, userId, deviceId);
       }
       // Remove
       else {
@@ -119,16 +108,12 @@ export default {
           String(r.userId) === String(userId)
         );
         if (rec) {
-          await fetch(`/api/smart-timers/${this.timerId}/recipients/${rec.id}`, {
-            method: 'DELETE'
-          });
-          // No local update! Wait for socket event
+          await this.smartTimersApi.removeRecipient(this.timerId, rec.id)
         }
       }
     },
     handleSmartTimerUpdate(timer) {
       if (String(timer.id) === String(this.timerId)) {
-        this.recipients = timer.recipients || [];
         this.$emit('recipients-change', this.recipients);
       }
     }

@@ -9,13 +9,7 @@ const userDAL = {
        VALUES (?, ?, 1, ?)`,
       username, email || null, now
     );
-    return {
-      id: res.lastInsertRowid,
-      username,
-      email: email || null,
-      active: true,
-      createdAt: now,
-    };
+    return userDAL.getUserById(res.lastInsertRowid);
   },
 
   getUserById: (id) => {
@@ -24,25 +18,29 @@ const userDAL = {
   },
 
   getUserByUsername: (username) => {
-    return db.get('SELECT * FROM users WHERE username = ?', [username]);
+    const row = db.get('SELECT * FROM users WHERE username = ?', [username]);
+    return row ? new User(row) : null;
   },
 
   getUserByEmail: (email) => {
-    return db.get('SELECT * FROM users WHERE email = ?', [email]);
+    const row = db.get('SELECT * FROM users WHERE email = ?', [email]);
+    return row ? new User(row) : null;
   },
 
   findUsersByName: (username) => {
-    return db.all(`
+    const rows = db.all(`
       SELECT * FROM users
       WHERE username LIKE '%' || ? || '%'
       ORDER BY username ASC
     `, [username]);
+    return rows.map(row => new User(row));
   },
 
   findUsersByExactUsername: (username) => {
-    return db.all(`
+    const rows = db.all(`
       SELECT * FROM users WHERE LOWER(username) = LOWER(?)
     `, [username]);
+    return rows.map(row => new User(row));
   },
 
   listUsers: (filter = {}) => {
@@ -55,8 +53,11 @@ const userDAL = {
     }
 
     sql += ' ORDER BY username ASC';
-    return db.all(sql, params);
+    // return db.all(sql, params);
+    const rows = db.all(sql, params);
+    return rows.map(row => new User(row));
   },
+  
   updateUser: (id, updates) => {
     const fields = [];
     const values = [];

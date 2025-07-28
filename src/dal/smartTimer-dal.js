@@ -18,17 +18,7 @@ const smartTimerDAL = {
     );
 
     // Return a timer object with ALL expected properties, using camelCase for frontend
-    return {
-      id: res.lastInsertRowid,
-      label,
-      duration,
-      state,
-      startTime: safeStartTime,
-      endTime: safeEndTime,
-      createdAt: now,
-      updatedAt: now,
-      // add other fields if needed (e.g., recipients: [])
-    };
+    return smartTimerDAL.getSmartTimerById(res.lastInsertRowid);
   },
 
   getSmartTimerById: (id) => {

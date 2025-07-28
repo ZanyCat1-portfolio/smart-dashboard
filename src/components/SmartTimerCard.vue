@@ -16,8 +16,10 @@
       />
       <RecipientsSelector
         :timer-id="timer.id"
-        :users="users"
+        :users="Object.values(usersApi.users)"
+        :devices="Object.values(devicesApi.devices)"
         :recipients="timer.recipients || []"
+        :smart-timers-api="smartTimersApi"
         @recipients-change="onRecipientsChange"
       />
     </template>
@@ -35,13 +37,16 @@ export default {
   components: { BaseDeviceCard, SmartTimer, RecipientsSelector },
   props: {
     timer: { type: Object, required: true },
-    users: { type: Array, required: true },
+    // users: { type: Array, required: true },
+    devicesApi: { type: Object, required: true },
+    usersApi: { type: Object, required: true },
     smartTimersApi: { type: Object, required: true }
   },
   data() {
     return {
       now: Date.now(),
       intervalId: null,
+      // users: []
     }
   },
   mounted() {
@@ -64,7 +69,6 @@ export default {
       this.smartTimersApi.pauseTimer(this.timer.id);
     },
     async unpauseTimer() {
-      console.log("did gET HERE THO")
       this.smartTimersApi.unpauseTimer(this.timer.id)
     },
     async cancelTimer() {

@@ -1,12 +1,34 @@
 // src/composables/useDevices.js
 import { reactive, computed, ref } from 'vue';
+import { getPushSubscription } from '../utils/push';
 
+const devices = reactive({})
 const base = import.meta.env.BASE_URL;
 
-const devices = reactive({});           // deviceId => device object
-const currentDevice = computed(() =>
-  Object.values(devices).find(d => d.active) || null
-);
+// // now imported from /src/data/devices
+// const devices = reactive({});
+const currentDevice = computed(() => {
+  const endpoint = localStorage.getItem('deviceEndpoint');
+  // console.log("endpoint from localStorage:", endpoint);
+
+  // Show all device endpoints for comparison
+  Object.values(devices).forEach(d => {
+    // console.log("device id:", d.id, "active:", d.active, "pushSubscription.endpoint:", d.pushSubscription?.endpoint);
+  });
+
+  // Show all matches
+  const matching = Object.values(devices).filter(d => d.pushSubscription?.endpoint === endpoint);
+  // console.log("devices with matching endpoint:", matching);
+
+  // Show the first matching active device
+  const result = Object.values(devices).find(
+    d => d.active && d.pushSubscription?.endpoint === endpoint
+  ) || null;
+  // console.log("currentDevice result:", result);
+
+  return result;
+});
+
 
 const visibleDevices = computed(() =>
   Object.values(devices).filter(d => d.active)
@@ -41,7 +63,8 @@ export function useDevices({ socket }) {
   }
 
   // Register a device if (userId, endpoint) is unique, else reactivate/update
-  async function registerDevice({ userId, name, pushSubscription, isPublic = false, platform = null }) {
+  async function registerDevice({ userId, name, pushSubscription, platform = null }) {
+    // console.log("THIS IS ME REGISTERING DEVICE")
     if (!userId || !pushSubscription?.endpoint) {
       throw new Error('userId and valid pushSubscription required');
     }
@@ -49,7 +72,7 @@ export function useDevices({ socket }) {
     const res = await fetch(`${base}api/devices/reactivate-or-register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, name, pushSubscription, isPublic, platform }),
+      body: JSON.stringify({ userId, name, pushSubscription, platform }),
     });
     if (!res.ok) {
       const err = await res.json();
@@ -57,7 +80,8 @@ export function useDevices({ socket }) {
     }
     const device = await res.json();
     devices[device.id] = device;
-    currentDevice.value = device;
+    localStorage.setItem('deviceEndpoint', pushSubscription.endpoint);
+    // currentDevice.value = device;
     return device;
   }
 
@@ -72,6 +96,85 @@ export function useDevices({ socket }) {
     devices[device.id] = device;
     return device;
   }
+
+
+
+  async function registerOrUpdateDevice({ user, deviceName }) {
+    if (!user || !user.id) throw new Error('Valid user object required');
+    // 1. Get pushSubscription
+    const pushSubscription = await getPushSubscription(); // Define/Import this helper!
+    const endpoint = pushSubscription?.endpoint;
+    if (!endpoint) throw new Error('No push subscription endpoint.');
+
+    // 2. Check for device by pushSubscription.endpoint in devices
+    let device = Object.values(devices).find(
+      d => d.pushSubscription?.endpoint === endpoint
+    );
+
+    // 3. If not found, check for device id in localStorage
+    if (!device) {
+      const localDeviceId = localStorage.getItem('deviceId');
+      if (localDeviceId && devices[localDeviceId]) {
+        device = devices[localDeviceId];
+      }
+    }
+
+    // 4. If found, update it; else, register new device
+    let resultDevice;
+    if (device && device.id) {
+      // Update existing
+      resultDevice = await updateDevice(device.id, {
+        userId: user.id,
+        name: deviceName,
+        pushSubscription,
+        platform: navigator.userAgent,
+        active: true
+      });
+    } else {
+      // Register new
+      resultDevice = await registerDevice({
+        userId: user.id,
+        name: deviceName,
+        pushSubscription,
+        platform: navigator.userAgent
+      });
+    }
+
+    // 5. Save device id and pushSubscription to localStorage
+    localStorage.setItem('deviceId', resultDevice.id);
+    localStorage.setItem('deviceEndpoint', endpoint);
+
+    return resultDevice;
+  }
+
+
+  async function unregisterDevice({ user }) {
+    if (!user || !user.id) throw new Error('Valid user object required');
+    // 1. Try localStorage.deviceId first
+    let deviceId = localStorage.getItem('deviceId');
+    let device = deviceId && devices[deviceId] ? devices[deviceId] : null;
+
+    // 2. If not found, fall back to current pushSubscription.endpoint
+    if (!device) {
+      const pushSubscription = await getPushSubscription();
+      const endpoint = pushSubscription?.endpoint;
+      if (!endpoint) throw new Error('No push subscription endpoint.');
+      device = Object.values(devices).find(
+        d => d.pushSubscription?.endpoint === endpoint
+      );
+    }
+
+    // 3. If still not found, error
+    if (!device || !device.id) throw new Error('Device not found');
+
+    // 4. Deactivate device (active: false, clear push)
+    await deactivateDevice(device.id);
+
+    return true;
+  }
+
+
+
 
   async function deactivateDevice(deviceId) {
     // Soft deactivation (active: false)
@@ -104,14 +207,20 @@ export function useDevices({ socket }) {
     });
     if (!res.ok) return null;
     const device = await res.json();
+    // console.log("device:created, device is:", device)
+    // console.log("device:created, devices before update are:", devices)
     devices[device.id] = device;
+    // console.log("device:created, devices after update are:", devices)
     return device;
   }
 
   if (socket) {
       // Single device update (create, update, etc)
       socket.on('device:created', device => {
+        // console.log("device:created, device is:", device)
+        // console.log("device:created, devices before update are:", devices)
           devices[device.id] = device;
+        // console.log("device:created, devices after update are:", devices)
       });
       socket.on('device:updated', device => {
           devices[device.id] = device;
@@ -120,15 +229,19 @@ export function useDevices({ socket }) {
           devices[device.id] = device;
       });
       socket.on('device:reactivated', device => {
+        // console.log("device:reactivated, device is:", device)
+        // console.log("device:reactivated, devices before update are:", devices)
           devices[device.id] = device;
+        // console.log("device:reactivated, devices after update are:", devices)
       });
 
       // Full devices snapshot (hydration)
       socket.on('devices:snapshot', (devicesArray) => {
-          Object.keys(devices).forEach(id => { delete devices[id]; });
-          devicesArray.forEach(device => {
-              devices[device.id] = device;
-          });
+        const arr = Array.isArray(devicesArray[0]) ? devicesArray[0] : devicesArray;
+        Object.keys(devices).forEach(id => { delete devices[id]; });
+        arr.forEach(device => {
+            devices[device.id] = device;
+        });
       });
   }
 
@@ -143,6 +256,8 @@ export function useDevices({ socket }) {
     getDeviceById,
     registerDevice,
     updateDevice,
+    registerOrUpdateDevice,
+    unregisterDevice,
     deactivateDevice,
     deleteDevice,
     findDeviceByEndpoint,

@@ -1,14 +1,18 @@
 // useSmartTimers.js
 import { reactive, computed, ref } from 'vue'
 
+
+
+const smartTimers = reactive({})
 const base = import.meta.env.BASE_URL;
-console.log("base is:", base)
+// console.log("base is:", base)
 
 // Shared reference for time
 const now = ref(Date.now())
 setInterval(() => { now.value = Date.now() }, 1000)
 
-const smartTimerStates = reactive({})
+// // now imported from /src/data/smartTimers
+// const smartTimers = reactive({})
 
 function mmss(sec) {
   if (!sec || sec <= 0) return '00:00'
@@ -32,48 +36,76 @@ export function useSmartTimers({ socket }) {
     }
 
     async function unpauseTimer(timerId) {
-        console.log("DID ALSO GET HERE?")
+        // console.log("DID ALSO GET HERE?")
         await fetch(`${base}api/smart-timers/${timerId}/unpause`, { method: 'POST' });
     }
     
     async function cancelTimer(timerId) {
         await fetch(`${base}api/smart-timers/${timerId}/cancel`, { method: 'POST' });
     }
+    
+    async function addRecipient(timerId, userId, deviceId, type = 'webpush', target = deviceId) {
+        await fetch(`/api/smart-timers/${timerId}/recipients`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, deviceId, type, target })
+        });
+    }
+
+    async function removeRecipient(timerId, recipientId) {
+        await fetch(`/api/smart-timers/${timerId}/recipients/${recipientId}`, {
+            method: 'DELETE'
+        });
+    }
 
 
     // --- SOCKET: SmartTimer listeners ---
-    console.log("COME BACK HERE")
+    // console.log("COME BACK HERE")
+    // console.log("what is socket: ", socket)
     // stop querying db every time, start returning inmem db that queries at startup
     if (socket) {
         socket.on('smart-timer-update', (timer) => {
+            // console.log('[SMART TIMER UPDATE]', timer);
             if (['pending', 'running', 'paused'].includes(timer.state)) {
-                smartTimerStates[timer.id] = timer;
+                smartTimers[timer.id] = timer;
             } else {
                 // Remove finished/canceled timers from state
-                delete smartTimerStates[timer.id];
+                delete smartTimers[timer.id];
             }
         });
 
         socket.on('smart-timer-snapshot', (timersArray) => {
-            Object.keys(smartTimerStates).forEach(id => { delete smartTimerStates[id]; });
-            timersArray.forEach(timer => {
-                smartTimerStates[timer.id] = timer;
-            });
+        const arr = Array.isArray(timersArray[0]) ? timersArray[0] : timersArray;
+
+        // Clear existing keys
+        Object.keys(smartTimers).forEach(id => delete smartTimers[id]);
+
+        // Assign each new timer
+        arr.forEach(timer => {
+            if (timer?.id != null) {
+            smartTimers[timer.id] = timer;
+            }
         });
 
-        socket.on('smartTimers:snapshot', (timersArray) => {
-            // Clear and re-populate
-            Object.keys(smartTimerStates).forEach(id => { delete smartTimerStates[id]; });
-            timersArray.forEach(timer => {
-                smartTimerStates[timer.id] = timer;
-            });
+        console.log('[FRONTEND] Updated smartTimers:', smartTimers);
+        console.log("[] 3", Date.now())
         });
+
+
+        // socket.on('smartTimers:snapshot', (timersArray) => {
+        //     const arr = Array.isArray(timersArray[0]) ? timersArray[0] : timersArray;
+        //     Object.keys(smartTimers).forEach(id => { delete smartTimers[id]; });
+        //     arr.forEach(timer => {
+        //         smartTimers[timer.id] = timer;
+        //     });
+        // });
+
     }
 
     const smartTimerDisplays = computed(() => {
         const out = {}
-        for (const id in smartTimerStates) {
-        const timer = smartTimerStates[id]
+        for (const id in smartTimers) {
+        const timer = smartTimers[id]
         let seconds = 0
         if (timer && timer.state === 'running' && timer.end_time) {
             const remaining = new Date(timer.end_time).getTime() - now.value
@@ -87,7 +119,7 @@ export function useSmartTimers({ socket }) {
     })
 
     const visibleSmartTimers = computed(() =>
-        Object.values(smartTimerStates).filter(
+        Object.values(smartTimers).filter(
         t => ['pending', 'paused', 'running'].includes(t.state)
         )
     );
@@ -101,13 +133,15 @@ export function useSmartTimers({ socket }) {
     }
 
     return {
-        smartTimerStates,
+        smartTimers,
         smartTimerDisplays,
         visibleSmartTimers,
         getSmartTimerDisplay,
         startTimer,
         pauseTimer,
         unpauseTimer,
-        cancelTimer
+        cancelTimer,
+        addRecipient,
+        removeRecipient,
     }
 }

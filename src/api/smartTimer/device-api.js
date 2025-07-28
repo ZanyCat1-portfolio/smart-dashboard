@@ -2,46 +2,20 @@ const express = require('express');
 const deviceDAL = require('../../dal/device-dal');
 const Device = require('../../models/Device');
 const eventBus = require('../../utils/eventBus');
+const { devices } = require('../../data/devices');
 
 // /api/devices due to proxy-server.cjs and index.js .use statements
 
-// In-memory object
-let devices = {};
-
-// Rehydrate devices from DB at startup
-function rehydrateDevicesOnStartup() {
-  const allDevices = deviceDAL.listAllDevices(); // get all from DB
-  devices = {};
-  allDevices.forEach(device => {
-    devices[device.id] = device;
-  });
-  eventBus.emit('devices:snapshot', Object.values(devices));
-}
-
-// Initial hydration
-rehydrateDevicesOnStartup();
-
-
-
 module.exports = (io) => {
-
   const router = express.Router();
-
-  // --- IN-MEM DB SETUP ---
-  const devices = {}; // id -> device object
-
-  // Load all devices at startup into memory
-  function loadDevicesToMemory() {
-    const all = deviceDAL.listAllDevices();
-    all.forEach(device => {
-      devices[device.id] = device;
-    });
-  }
-  loadDevicesToMemory();
 
   // Utility: update in-mem db and emit event
   function updateDeviceInMem(device) {
+    // console.log("UPDATE DEVICE IN MEM")
+    // console.log("device is:", device)
+    // console.log("devices before update is:", devices)
     devices[device.id] = device;
+    // console.log("devices after update is:", devices)
   }
 
   // Utility: find device by endpoint (in-mem)
@@ -58,49 +32,6 @@ module.exports = (io) => {
   }
 
   // --- ENDPOINTS ---
-
-  // Register a new device
-  router.post('/', (req, res) => {
-    const { userId, name, pushSubscription } = req.body;
-
-    if (!userId || typeof userId !== 'number') {
-      return res.status(400).json({ error: 'userId (number) required' });
-    }
-    if (!name || typeof name !== 'string' || !name.trim()) {
-      return res.status(400).json({ error: 'Device name required' });
-    }
-    if (pushSubscription && typeof pushSubscription !== 'object') {
-      return res.status(400).json({ error: 'pushSubscription, if provided, must be an object' });
-    }
-
-    try {
-      if (pushSubscription && pushSubscription.endpoint) {
-        const existing = findDeviceByEndpoint(pushSubscription.endpoint);
-        if (existing) {
-          // Reactivate device if inactive
-          if (!existing.active) {
-            const updatedDevice = deviceDAL.updateDevice(existing.id, {
-              active: true,
-              name,
-            });
-            updateDeviceInMem(updatedDevice);
-            eventBus.emit('device:reactivated', updatedDevice);
-            return res.status(200).json(updatedDevice);
-          }
-          // If active, conflict
-          return res.status(409).json({ error: 'A device with this push subscription already exists', device: existing });
-        }
-      }
-
-      // Create new device
-      const device = deviceDAL.createDevice(req.body);
-      updateDeviceInMem(device);
-      eventBus.emit('device:created', device);
-      res.status(201).json(device);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
 
   // POST /api/devices/reactivate-or-register
   router.post('/reactivate-or-register', (req, res) => {
@@ -172,7 +103,7 @@ module.exports = (io) => {
   // Get device by id
   router.get('/:id', (req, res) => {
     try {
-      const device = devices[Number(req.params.id)];
+      const device = devices[req.params.id];
       if (!device) return res.status(404).json({ error: 'Not found' });
       res.json(device);
     } catch (err) {
@@ -194,33 +125,29 @@ module.exports = (io) => {
 
   // Patch device (commonly for activate/deactivate)
   router.patch('/:id', (req, res) => {
-    const deviceId = Number(req.params.id);
-    const updates = req.body;
+    const deviceId = req.params.id;
+    const updates = { ...req.body }; // clone so we can modify
 
     if (typeof updates.active !== 'boolean' && !Object.keys(updates).length) {
       return res.status(400).json({ error: 'Invalid or missing fields in request body' });
     }
 
     try {
+      let device = deviceDAL.getDeviceById(deviceId);
+      if (!device) return res.status(404).json({ error: 'Device not found' });
+
       const updatedDevice = deviceDAL.updateDevice(deviceId, updates);
-      if (!updatedDevice) return res.status(404).json({ error: 'Device not found' });
       updateDeviceInMem(updatedDevice);
 
-      if ('active' in updates) {
-        if (updates.active) {
-          eventBus.emit('device:reactivated', updatedDevice);
-        } else {
-          eventBus.emit('device:deactivated', updatedDevice);
-        }
-      } else {
-        eventBus.emit('device:updated', updatedDevice);
-      }
+      // (emit events as before)
 
       return res.json(updatedDevice);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
+
+
 
   // No physical delete: do not emit device:deleted, only deactivate.
 

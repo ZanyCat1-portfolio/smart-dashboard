@@ -1,9 +1,11 @@
 // src/composables/useUsers.js
 import { reactive, computed, ref } from 'vue';
 
+const users = reactive({})
 const base = import.meta.env.BASE_URL;
 
-const users = reactive({});         // userId => user object
+// // now imported from /src/data/users
+// const users = reactive({});
 
 // Example: The "current user" could be managed as a ref or computed
 const currentUser = computed(() =>
@@ -34,8 +36,8 @@ export function useUsers({ socket }) {
   }
 
   function getUserByUsername(username) {
-    console.log("WHAT IS USERNAME?:", username)
-    console.log("what is users?", users)
+    // console.log("WHAT IS USERNAME?:", username)
+    // console.log("what is users?", users)
     return Object.values(users).find(u => u.username === username) || null;
   }
   // async function getUserByUsername(username) {
@@ -113,7 +115,7 @@ export function useUsers({ socket }) {
           usersArray.forEach(user => {
               users[user.id] = user;
           });
-              console.log("users (in-mem) after snapshot:", Object.values(users));
+              // console.log("users (in-mem) after snapshot:", Object.values(users));
 
       });
   }  

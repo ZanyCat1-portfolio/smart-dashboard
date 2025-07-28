@@ -3,30 +3,38 @@ const smartTimerDAL = require('../../dal/smartTimer-dal');
 const recipientDAL = require('../../dal/recipient-dal');
 const SmartTimer = require('../../models/SmartTimer');
 const eventBus = require('../../utils/eventBus');
-const { mqttClient } = require('../../../proxy-server.cjs');
+const { mqttClient } = require('../../../src/mqtt/mqtt-client');
 const { publishSmartTimerState } = require('../../../src/utils/smartTimer-mqtt');
 const { exportHistoricTimersToCSV } = require('../../utils/export');
-
-// In-memory timers object
-const timers = {}; // timerId: timer
+const { smartTimers } = require('../../data/smartTimers');
+// const { scheduleTimerFinish, finishTimerAndNotify, clearTimerTimeout } = require('../../utils/smartTimer-logic');
 
 // /api/smart-timers due to proxy-server.cjs and index.js use statements
 const activeTimerTimeouts = {}; // timerId: timeoutId
 
-// ----- Timeout Helpers -----
+// ---- IN-MEMORY UTILS ----
+function addOrUpdateTimer(timer) {
+  smartTimers[timer.id] = timer;
+}
+function deleteTimer(timerId) {
+  delete smartTimers[timerId];
+}
+
+// CRUD utils using in-mem first, then DAL for persistence
+function getTimerById(id) {
+  return smartTimers[id] || null;
+}
+
 function scheduleTimerFinish(timer) {
-  // Clear any existing timeout first
   clearTimerTimeout(timer.id);
 
   if (!timer.endTime) return;
   const msUntilEnd = new Date(timer.endTime) - Date.now();
   if (msUntilEnd <= 0) {
-    // Already overdue: finish immediately and notify
-    finishTimerAndNotify(timer.id, true); // true = notify late
+    finishTimerAndNotify(timer.id, true);
     return;
   }
 
-  // Schedule finish
   activeTimerTimeouts[timer.id] = setTimeout(() => {
     finishTimerAndNotify(timer.id);
   }, msUntilEnd);
@@ -39,45 +47,14 @@ function clearTimerTimeout(timerId) {
   }
 }
 
-// Call when timer finishes (timeout or manual)
-async function finishTimerAndNotify(timerId, isLate = false) {
+function finishTimerAndNotify(timerId, isLate = false) {
   clearTimerTimeout(timerId);
-  const timer = finishTimer(timerId); // update in-mem and DB
+  const timer = smartTimerDAL.finishTimer(timerId);
   if (timer) {
+    smartTimers[timer.id] = timer; // update in-mem store
     eventBus.emit('timer:finished', timer);
     publishSmartTimerState(mqttClient, timer);
   }
-}
-
-// ---- IN-MEMORY UTILS ----
-function addOrUpdateTimer(timer) {
-  timers[timer.id] = timer;
-}
-function deleteTimer(timerId) {
-  delete timers[timerId];
-}
-
-// --- HYDRATE TIMERS ON STARTUP ---
-function rehydrateTimersOnStartup() {
-  const allTimers = smartTimerDAL.listAllSmartTimers();
-  allTimers.forEach(timer => {
-    timers[timer.id] = timer;
-    // Only process timers that are running AND have an endTime
-    if (timer.state === 'running' && timer.endTime) {
-      const msUntilEnd = new Date(timer.endTime) - Date.now();
-      if (msUntilEnd > 0) {
-        scheduleTimerFinish(timer);
-      } else {
-        finishTimerAndNotify(timer.id, true); // Mark late timers as finished immediately
-      }
-    }
-  });
-  eventBus.emit('smartTimers:snapshot', Object.values(timers))
-}
-
-// CRUD utils using in-mem first, then DAL for persistence
-function getTimerById(id) {
-  return timers[id] || null;
 }
 
 function createTimer({ label, duration }) {
@@ -170,9 +147,6 @@ function finishTimer(id) {
 module.exports = (io) => {
   const router = express.Router();
 
-  // ---- HYDRATE IN-MEMORY DB ON STARTUP ----
-  rehydrateTimersOnStartup();
-
   // --- Timer Endpoints ---
 
   router.post('/', (req, res) => {
@@ -195,7 +169,7 @@ module.exports = (io) => {
   router.get('/', (req, res) => {
     try {
       const { state } = req.query;
-      let allTimers = Object.values(timers);
+      let allTimers = Object.values(smartTimers);
       let result;
       if (state) {
         // state can be comma-separated
@@ -214,7 +188,7 @@ module.exports = (io) => {
     try {
       const before = req.query.before;
       // Use in-mem for historic timers
-      const historic = Object.values(timers).filter(t => t.state === 'finished' || t.state === 'canceled');
+      const historic = Object.values(smartTimers).filter(t => t.state === 'finished' || t.state === 'canceled');
       const csv = exportHistoricTimersToCSV(
         before ? historic.filter(t => new Date(t.updatedAt) < new Date(before)) : historic
       );
@@ -387,8 +361,8 @@ module.exports = (io) => {
       const before = req.query.before;
       smartTimerDAL.pruneHistoricSmartTimers({ beforeDate: before });
       // Also prune in-mem timers
-      for (const id in timers) {
-        const timer = timers[id];
+      for (const id in smartTimers) {
+        const timer = smartTimers[id];
         if ((timer.state === 'finished' || timer.state === 'canceled') && (!before || new Date(timer.updatedAt) < new Date(before))) {
           deleteTimer(id);
         }

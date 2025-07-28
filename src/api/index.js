@@ -14,6 +14,11 @@ module.exports = (io) => {
     const exampleGoveeApi = require('./govee/example-govee-api')(io);
     const goveeApi = require('./govee/govee-api')(io);
 
+    const authLoginApi = require('./auth/login-api')(io);
+    const authRegisterApi = require('./auth/register-api')(io);
+    const authLogoutApi = require('./auth/logout-api')(io);
+    const authSessionApi = require('./auth/session-api')(io);
+
     router.use('/smart-timers', smartTimerApi);
     router.use('/devices', deviceApi);
     router.use('/users', userApi);
@@ -23,6 +28,11 @@ module.exports = (io) => {
 
     router.use('/example-govee', exampleGoveeApi);
     router.use('/govee', goveeApi);
+
+    router.use('/auth/login', authLoginApi);
+    router.use('/auth/register', authRegisterApi);
+    router.use('/auth/logout', authLogoutApi);
+    router.use('/auth/session', authSessionApi);
 
     return router;
 }

@@ -16,7 +16,8 @@ const deviceDAL = {
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [userId, name, type, pushSubString, mqttTopic, ipAddress, now]
     );
-    return { ...data, id: res.lastInsertRowid, createdAt: now };
+
+    return deviceDAL.getDeviceById(res.lastInsertRowid);
   },
 
   getDeviceById: (id) => {
@@ -85,10 +86,11 @@ const deviceDAL = {
   },
 
   findDevicesByUserIdAndName: (userId, name) => {
-    return db.all(
+    const rows = db.all(
       `SELECT * FROM devices WHERE userId = ? AND name = ? COLLATE NOCASE`,
       [userId, name]
     );
+    return rows.map(row => new Device(row));
   },
 
   listAllDevices: () => {

@@ -2,6 +2,7 @@ class User {
   constructor(row) {
     this.id = row.id;
     this.username = row.username;
+    this.passwordHash = row.passwordHash;
     this.email = row.email || null;
     this.createdAt = row.createdAt !== undefined ? row.createdAt : row.created_at;
 

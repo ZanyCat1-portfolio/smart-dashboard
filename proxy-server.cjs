@@ -3,10 +3,12 @@ require('./src/api/verify-devices');
 require('dotenv').config();
 
 const express  = require('express');
-const http     = require('http');
+// const http     = require('http');
+const https     = require('https');
 const path     = require('path');
 const fs       = require('fs');
-const mqtt     = require('mqtt');
+// const mqtt     = require('mqtt');
+const mqttClient = require('./src/mqtt/mqtt-client.js');
 const { Server } = require('socket.io');
 const { getCurrentDemoTimerStates } = require('./src/utils/apiHelpers');
 const fetch    = (...args) => import('node-fetch').then(({default: f}) => f(...args));
@@ -14,13 +16,18 @@ const { publishSmartTimerState, subscribeSmartTimerTopics } = require('./src/uti
 const { logMqtt } = require('./src/utils/logger');
 
 
+const options = {
+  key: fs.readFileSync(path.resolve(__dirname, 'cert/dev-key.pem')),
+  cert: fs.readFileSync(path.resolve(__dirname, 'cert/dev-cert.pem'))
+}
 // ---- New: Import SmartTimer DAL for DB operations (adjust path as needed)
 const smartTimerDAL = require('./src/dal/smartTimer-dal.js');
 
 // ───── Config & Helpers ─────
 
 const app    = express();
-const server = http.createServer(app);
+// const server = http.createServer(app);
+const server = https.createServer(options, app);
 const io     = new Server(server, { cors: { origin: '*' } });
 const eventBus = require('./src/utils/eventBus.js');
 eventBus.setIo(io);
@@ -53,15 +60,15 @@ function devLog(...args) {
 // ---- Base path config ----
 const basePath        = process.env.BASE_PATH || '/';
 const normalizedBase  = basePath.endsWith('/') ? basePath : basePath + '/';
-console.log("what is base path?:", process.env.BASE_PATH)
+// console.log("what is base path?:", process.env.BASE_PATH)
 
 // ───── MQTT Bridge (for Real Devices & SmartTimers) ─────
 
-const MQTT_URL = process.env.MQTT_URL || 'mqtt://localhost:1883';
-const mqttClient = mqtt.connect(MQTT_URL, {
-  username: process.env.MQTT_USER,
-  password: process.env.MQTT_PASS,
-});
+// const MQTT_URL = process.env.MQTT_URL || 'mqtt://localhost:1883';
+// const mqttClient = mqtt.connect(MQTT_URL, {
+//   username: process.env.MQTT_USER,
+//   password: process.env.MQTT_PASS,
+// });
 subscribeSmartTimerTopics(mqttClient, io, smartTimerDAL)
 
 // ---- Existing device MQTT subscribe logic
@@ -138,20 +145,39 @@ mqttClient.on('message', (topic, payload) => {
 
 // ---- Existing: On connection, emit demo timer state
 io.on('connection', (socket) => {
+  // console.log('[SOCKET.IO] Client connected:', socket.id);
+
   const demoTimers = getCurrentDemoTimerStates();
   socket.emit('timer-snapshot', demoTimers);
+  // console.log('[SOCKET.IO] Sent timer-snapshot:', demoTimers);
 
-  const smartTimers = smartTimerDAL.getCurrentActiveSmartTimers();
-  socket.emit('smart-timer-snapshot', smartTimers);
+  const { smartTimers } = require('./src/data/smartTimers.js');
+  socket.emit('smart-timer-snapshot', Object.values(smartTimers));
+  console.log("[PROXY-SERVER.CJS SOCKET EMIT] 2", Date.now())
+  // console.log('[SOCKET.IO] Sent smart-timer-snapshot:', smartTimers);
 
-    // Devices:
-  const devices = Object.values(require('./src/api/smartTimer/device-api').devices); // your in-mem devices
-  socket.emit('devices:snapshot', devices);
+  // Devices:
+  const { devices } = require('./src/data/devices');
+    socket.emit('devices:snapshot', Object.values(devices));
+    // console.log('[SOCKET.IO] Sent devices:snapshot:', devices);
 
-  // Users:
-  const users = Object.values(require('./src/api/smartTimer/user-api').users); // your in-mem users
-  socket.emit('users:snapshot', users);
-});
+    // Users:
+    const { users } = require('./src/data/users');
+    socket.emit('users:snapshot', Object.values(users));
+    // console.log('[SOCKET.IO] Sent users:snapshot:', users);
+  });
+
+  const session = require('express-session');
+  app.use(session({
+    secret: 'your-secret-here',
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,
+    cookie: {
+      maxAge: 15 * 60 * 1000,
+      httpOnly: true,
+    }
+  }));
 
 // ───── All Routers from /src/api:  ─────
 const apiRouter = require('./src/api')(io);
@@ -176,7 +202,7 @@ app.get(normalizedBase + '*', (req, res) => {
 // ───── Start Server ─────
 
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   devLog(`🚀 Dashboard + WS listening on port ${PORT} (base: ${normalizedBase})`);
 });
 

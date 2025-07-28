@@ -15,13 +15,37 @@
       </div>
 
       <div class="device-registration-section mb-4">
-        <div v-if="devicesApi && usersApi">
-          <DeviceRegistration
+        <!-- Simple login form if not logged in -->
+        <div v-if="!isLoggedIn">
+          <div class="mb-2">
+            <button
+              class="btn btn-outline-primary me-2"
+              :class="{ active: !showRegister }"
+              @click="showRegister = false"
+            >Login</button>
+            <button
+              class="btn btn-outline-secondary"
+              :class="{ active: showRegister }"
+              @click="showRegister = true"
+            >Register</button>
+          </div>
+          <LoginForm v-if="!showRegister" @login-success="onLoginSuccess" />
+          <RegisterForm v-else @register-success="onRegisterSuccess" />
+        </div>
+
+
+
+        <!-- Show DeviceRegistration only when logged in -->
+        <div v-else>
+          <button @click="logout" class="btn btn-secondary mb-2">Log Out</button>
+          <DeviceRegistration v-if="user"
+            :user="user"
             :devices-api="devicesApi"
             :users-api="usersApi"
           />
         </div>
       </div>
+
 
       <nav class="mb-4 sticky-nav">
         <ul class="nav nav-tabs">
@@ -64,9 +88,16 @@
               <div v-for="timer in smartTimersApi.visibleSmartTimers" :key="timer.id" class="col">
                 <SmartTimerCard
                   :timer="timer"
-                  :users="users" 
                   :smart-timers-api="smartTimersApi"
+                  :users-api="usersApi"
+                  :devices-api="devicesApi"
                 />
+                <!-- <SmartTimerCard
+                  :timer="timer"
+                  :smart-timers-api="smartTimersApi"
+                  :users-api="usersApi"
+                  :devices-api="devicesApi"
+                /> -->
               </div>
             </div>
           </div>
@@ -120,7 +151,8 @@
 </template>
 
 <script>
-import { io } from 'socket.io-client'
+// import { io } from 'socket.io-client'
+import socket from './composables/useSocket'
 import TasmotaCard from './components/TasmotaCard.vue'
 import GoveeCard from './components/GoveeCard.vue'
 import SmartTimerCard from './components/SmartTimerCard.vue'
@@ -130,12 +162,19 @@ import { useTasmotaTimers } from './composables/useTasmotaTimers'
 import { useSmartTimers } from './composables/useSmartTimers'
 import { useDevices } from './composables/useDevices'
 import { useUsers } from './composables/useUsers'
+import { refreshLoginTimer } from './utils/utils'
+import LoginForm from './components/LoginForm.vue'
+import RegisterForm from './components/RegisterForm.vue'
+
+const TIMEOUT_MINUTES = 15;
+const LOGIN_TIMEOUT = TIMEOUT_MINUTES * 60 * 1000;
+
 
 const base = import.meta.env.BASE_URL
 
 export default {
   name: 'App',
-  components: { TasmotaCard, GoveeCard, SmartTimerCard, SmartTimerCreateForm, DeviceRegistration },
+  components: { TasmotaCard, GoveeCard, SmartTimerCard, SmartTimerCreateForm, DeviceRegistration, LoginForm, RegisterForm },
   data() {
     return {
       currentPage: 'dashboard',
@@ -147,7 +186,6 @@ export default {
       theme: 'light',
       isExampleFile: false,
       exampleInfo: '',
-      socket: null,
       deviceStates: {},
       timerStates: {},
       smartTimerStates: {},
@@ -160,6 +198,13 @@ export default {
       smartTimersApi: null,
       devicesApi: null,
       usersApi: null,
+      username: '',
+      isLoggedIn: false,
+      user: null,
+      loginError: null,
+      loginTimer: null,
+      userSuggestions: JSON.parse(localStorage.getItem('usernames') || '[]'),
+      showRegister: false,
     }
   },
   computed: {
@@ -187,204 +232,149 @@ export default {
       }
     },
   },
-  async mounted() {
-    await this.loadDevices();
-    Object.keys(this.groupedDevices).forEach(type => {
-      this.openGroups[type] = true;
-    });
+async mounted() {
+  this.logout()
 
-    this.openGroups.smartTimers = true;
+  // 1. Register all composables immediately!
+  const tasmotaApi = useTasmotaTimers({ socket, getApiRoute: this.getApiRoute });
+  const smartTimersApi = useSmartTimers({ socket });
+  this.smartTimersApi = smartTimersApi;
+  const devicesApi = useDevices({ socket });
+  this.devicesApi = devicesApi;
+  const usersApi = useUsers({ socket });
+  this.usersApi = usersApi;
 
-    const saved = localStorage.getItem('theme');
-    if (saved) this.theme = saved;
-    document.body.classList.toggle('dark-mode', this.theme === 'dark');
-    document.getElementById('app')?.classList.add(this.theme);
+  this.deviceStates   = tasmotaApi.deviceStates;
+  this.timerStates    = tasmotaApi.timerStates;
+  this.timerDisplays  = tasmotaApi.timerDisplays;
+  this.startTimer     = tasmotaApi.startTimer;
+  this.addToTimer     = tasmotaApi.addToTimer;
+  this.cancelTimer    = tasmotaApi.cancelTimer;
+  this.fetchAndSync   = tasmotaApi.fetchAndSync;
+  this.smartTimerStates    = smartTimersApi.smartTimerStates;
+  this.smartTimerDisplays  = smartTimersApi.smartTimerDisplays;
+  this.getSmartTimerDisplay = smartTimersApi.getSmartTimerDisplay;
 
-    this.socket = io(window.location.origin, {
-      path: '/socket.io',
-      transports: ['websocket', 'polling']
-    });
+  window.smartTimerStates = smartTimersApi.smartTimerStates;
 
+  // 2. All other awaits and DOM logic after handlers
+  await this.loadDevices();
+  Object.keys(this.groupedDevices).forEach(type => { this.openGroups[type] = true; });
+  this.openGroups.smartTimers = true;
+  const saved = localStorage.getItem('theme');
+  if (saved) this.theme = saved;
+  document.body.classList.toggle('dark-mode', this.theme === 'dark');
+  document.getElementById('app')?.classList.add(this.theme);
 
-    // In your setup or created/mounted block
-    const tasmotaApi = useTasmotaTimers({
-      socket: this.socket,
-      getApiRoute: this.getApiRoute,
-    });
-    const smartTimersApi = useSmartTimers({
-      socket: this.socket,
-    });
-    this.smartTimersApi = smartTimersApi;
+  await Promise.all(
+    this.devices.map(async device => {
+      await this.fetchStatus(device);
+    })
+  );
 
-    const devicesApi = useDevices({
-      socket: this.socket,
-    });
-    this.devicesApi = devicesApi;
+  this.loadingDevices = false;
 
-    const usersApi = useUsers({
-      socket: this.socket,
-    });
-    this.usersApi = usersApi;
+},
 
-    // Attach Tasmota timers API
-    this.deviceStates   = tasmotaApi.deviceStates;
-    this.timerStates    = tasmotaApi.timerStates;
-    this.timerDisplays  = tasmotaApi.timerDisplays;
-    this.startTimer     = tasmotaApi.startTimer;
-    this.addToTimer     = tasmotaApi.addToTimer;
-    this.cancelTimer    = tasmotaApi.cancelTimer;
-    this.fetchAndSync   = tasmotaApi.fetchAndSync;
+beforeUnmount() {
+  if (this.dashboardTimerPoll) clearInterval(this.dashboardTimerPoll);
+  if (this.tasmotaTimerPoll) clearInterval(this.tasmotaTimerPoll);
+},
+watch: {
+  isLoggedIn(val) {
+    if (val) this.startLoginTimer();
+    else this.clearLoginTimer;
+  }
+},
 
-    // Attach Smart Timers API
-    this.smartTimerStates    = smartTimersApi.smartTimerStates;
-    this.smartTimerDisplays  = smartTimersApi.smartTimerDisplays;
-    this.getSmartTimerDisplay = smartTimersApi.getSmartTimerDisplay;
-    // Add more if your new useSmartTimers composable exposes them
-
-
-
-    await Promise.all(
-      this.devices.map(async device => {
-        await this.fetchStatus(device);
-      })
-    );
-
-    this.loadingDevices = false;
+methods: {
+  onLoginSuccess(user) {
+    this.user = user;
+    this.isLoggedIn = true;
+    localStorage.setItem('user', JSON.stringify(user));
+    this.startLoginTimer();
   },
-
-  beforeUnmount() {
-    if (this.dashboardTimerPoll) clearInterval(this.dashboardTimerPoll);
-    if (this.tasmotaTimerPoll) clearInterval(this.tasmotaTimerPoll);
+  onRegisterSuccess(user) {
+    this.user = user;
+    this.isLoggedIn = true;
+    localStorage.setItem('user', JSON.stringify(user));
+    this.startLoginTimer();
   },
+  async login() {
+    this.loginError = null;
+    const username = this.username.trim();
+    console.log("on login, what is username: ", !!username)
+    if (!username) return;
+    console.log("Do I here?")
 
-  methods: {
-    async handleTimerCreate(timerData) {
-      // Example: Send the timer data to your backend to create a new timer
-      try {
-        const response = await fetch('/api/smart-timers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(timerData),
-        });
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Failed to create timer');
-        }
-        const newTimer = await response.json();
-
-        // Optionally update local state, e.g., add newTimer to a list
-        // this.smartTimers.push(newTimer);
-
-        // Show a success message or reset form as needed
-        console.log('Timer created successfully:', newTimer);
-      } catch (error) {
-        // Handle errors (show to user, log, etc.)
-        console.error('Error creating timer:', error.message);
-      }
-    },
-  async onDeviceRegistered({ userName, deviceName, isPublic }) {
     try {
-      // 1. Resolve or create user
-      let res = await fetch(`/api/users?username=${encodeURIComponent(userName)}`);
-      let users = res.ok ? await res.json() : [];
-      let user = users.length > 0 ? users[0] : null;
-
-      if (user) {
-        // Update username if needed (handle rename)
-        if (user.username !== userName) {
-          const updateRes = await fetch(`/api/users/${user.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: userName }),
-          });
-          if (!updateRes.ok) throw new Error('Failed to update username');
-          user = await updateRes.json();
-        }
-      } else {
-        res = await fetch('/api/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: userName }),
-        });
-        user = await res.json();
-        if (!user || !user.id) throw new Error('Failed to create user');
+      // 1. Validate user (create if not found)
+      let user = await this.usersApi.getUserByUsername(username);
+      if (!user) {
+        user = await this.usersApi.createUser(username);
+        if (!user) throw new Error("Failed to create user");
       }
+      this.user = user;
+      this.isLoggedIn = true;
 
-      // 2. Get push subscription
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        throw new Error('Push notifications not supported');
+      // 2. Save username to suggestions
+      let suggestions = this.userSuggestions;
+      if (!suggestions.includes(username)) {
+        suggestions.push(username);
+        localStorage.setItem('usernames', JSON.stringify(suggestions));
       }
-      const swReg = await navigator.serviceWorker.ready;
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') throw new Error('Notification permission denied');
+      // Optionally persist logged in user
+      localStorage.setItem('user', JSON.stringify(user));
 
-      const vapidResp = await fetch('/api/vapid-public-key');
-      if (!vapidResp.ok) throw new Error('Failed to get VAPID key');
-      const publicVapidKey = await vapidResp.text();
+      // 3. Start login timer
+      this.startLoginTimer();
 
-      function urlBase64ToUint8Array(base64String) {
-        const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-        const rawData = window.atob(base64);
-        return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
-      }
-
-      const subscription = await swReg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicVapidKey),
-      });
-
-      // 3. Check if device exists for user and name
-      res = await fetch(`/api/devices?userId=${user.id}&name=${encodeURIComponent(deviceName)}`);
-      let devices = res.ok ? await res.json() : [];
-      let device = devices.length > 0 ? devices[0] : null;
-
-      if (device) {
-        // Update device: mark active and update name if needed
-        if (device.name !== deviceName || !device.active) {
-          const patchRes = await fetch(`/api/devices/${device.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              active: true,
-              name: deviceName
-            }),
-          });
-          if (!patchRes.ok) throw new Error('Failed to update device');
-          device = await patchRes.json();
-        }
-      } else {
-        // Create new device
-        res = await fetch('/api/devices', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            name: deviceName,
-            pushSubscription: subscription,
-            isPublic,
-            platform: navigator.userAgent || 'unknown',
-          }),
-        });
-        device = await res.json();
-        if (!device || !device.id) throw new Error('Failed to create device');
-      }
-
-      // 4. Update local state
-      this.deviceRegistered = true;
-      this.registeredDeviceInfo = {
-        userId: user.id,
-        deviceId: device.id,
-        userName: user.username,
-        deviceName: device.name,
-      };
-    } catch (error) {
-      console.error('Device registration failed:', error);
-      this.deviceRegistered = false;
+    } catch (e) {
+      this.loginError = e.message || "Login failed";
     }
   },
+  logout() {
+    this.isLoggedIn = false;
+    this.user = null;
+    this.username = '';
+    this.clearLoginTimer();
+  },
+  startLoginTimer() {
+    this.clearLoginTimer();
+    this.loginTimer = refreshLoginTimer(() => {
+      this.logout();
+    }, LOGIN_TIMEOUT);
+  },
+  clearLoginTimer() {
+    if (this.loginTimer) clearTimeout(this.loginTimer);
+    this.loginTimer = null;
+  },
 
+  async handleTimerCreate(timerData) {
+    // SHOULD THIS HAPPEN IN SMARTTIMER COMPONENT?
+    // Example: Send the timer data to your backend to create a new timer
+    try {
+      const response = await fetch('/api/smart-timers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(timerData),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to create timer');
+      }
+      const newTimer = await response.json();
 
+      // Optionally update local state, e.g., add newTimer to a list
+      // this.smartTimers.push(newTimer);
+
+      // Show a success message or reset form as needed
+      console.log('Timer created successfully:', newTimer);
+    } catch (error) {
+      // Handle errors (show to user, log, etc.)
+      console.error('Error creating timer:', error.message);
+    }
+  },
   async onDeviceUnregistered() {
     console.log("Is this even happeNING?>?ASDF")
     try {

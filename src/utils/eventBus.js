@@ -39,6 +39,7 @@ eventBus.on('timer:addedTo', async (timer) => {
 });
 
 // timer:paused
+// should resync timer's countdown on pause, maybe on unpause too?
 eventBus.on('timer:paused', async (timer) => {
   const recipients = await recipientDAL.getRecipientsForTimer(timer.id);
   const payload = { type: 'timerPaused', timer };
@@ -46,6 +47,7 @@ eventBus.on('timer:paused', async (timer) => {
   if (ioInstance) ioInstance.emit('smart-timer-update', timer);
 });
 
+// should resync timer's countdown on unpause, maybe on pause too?
 eventBus.on('timer:unpaused', async (timer) => {
   const recipients = await recipientDAL.getRecipientsForTimer(timer.id);
   const payload = { type: 'timerUnpaused', timer };
@@ -70,7 +72,7 @@ eventBus.on('timer:finished', async (timer) => {
 });
 
 eventBus.on('recipients:updated', ({ timerId, recipient }) => {
-  console.log("eventbus emits smart-timer-update")
+  // console.log("eventbus emits smart-timer-update")
   const timer = smartTimerDAL.getSmartTimerById(timerId);
   timer.recipients = recipientDAL.getRecipientsForTimer(timerId); // (if not already set)
   if (ioInstance) ioInstance.emit('smart-timer-update', timer);
@@ -102,7 +104,7 @@ eventBus.on('user:deactivated', user => {
 });
 
 eventBus.on('users:snapshot', usersArray => {
-  console.log("eventBus.on users:snapshot: usersArray:", usersArray)
+  // console.log("eventBus.on users:snapshot: usersArray:", usersArray)
   if (ioInstance) ioInstance.emit('users:snapshot', usersArray);
 });
 
@@ -110,7 +112,9 @@ eventBus.on('devices:snapshot', devicesArray => {
   if (ioInstance) ioInstance.emit('devices:snapshot', devicesArray);
 });
 
+// we aren't using smartTimers:snapshot
 eventBus.on('smartTimers:snapshot', timersArray => {
+  console.log("[SMARTTIMERS:SNAPSHOT] in eventBus.js")
   if (ioInstance) ioInstance.emit('smartTimers:snapshot', timersArray);
 });
 

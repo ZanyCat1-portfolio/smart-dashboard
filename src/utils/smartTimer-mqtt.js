@@ -18,10 +18,16 @@ function publishSmartTimerState(mqttClient, timer) {
 function subscribeSmartTimerTopics(mqttClient, io, smartTimerDAL) {
   if (!mqttClient) return;
 
-  mqttClient.subscribe('smarthome/smarttimer/+/command', (err) => {
-    if (err) logError('Failed to subscribe to SmartTimer command topics:', err);
-    console.log(process.env.NODE_ENV)
-  });
+  const isDev = process.env.NODE_ENV === 'development';
+
+  if (!isDev) {
+    mqttClient.subscribe('smarthome/smarttimer/+/command', (err) => {
+      if (err) logError('Failed to subscribe to SmartTimer command topics:', err);
+      // console.log(process.env.NODE_ENV)
+    });
+  } else {
+    logMqtt('Development mode only simulates mqtt server.')
+  }
 
   mqttClient.on('message', (topic, payload) => {
     if (!topic.startsWith('smarthome/smarttimer/')) return;

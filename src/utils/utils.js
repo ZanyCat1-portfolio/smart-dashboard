@@ -7,3 +7,7 @@ export function formatDisplay(sec) {
   const s = sec % 60;
   return `${min}:${s.toString().padStart(2, '0')}`;
 }
+
+export function refreshLoginTimer(callback, timeoutMs) {
+  return setTimeout(callback, timeoutMs);
+}

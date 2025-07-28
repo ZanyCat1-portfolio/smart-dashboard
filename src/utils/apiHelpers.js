@@ -2,7 +2,7 @@ const path = require('path');
 const fs = require('fs');
 
 const DEVICES_PATH = path.join(__dirname, '..', '..', 'public', 'devices.json');
-console.log('Loading devices from:', DEVICES_PATH);
+// console.log('Loading devices from:', DEVICES_PATH);
 
 let ioInstance;
 function setIo(io) { ioInstance = io; }
@@ -48,7 +48,7 @@ function getDemoStatus(device) {
 
 function emitDemoStatus(device, state) {
   demoState[device.endpoint] = state;
-  console.log(`[SOCKET EMIT] device-status for`, device.endpoint, state);
+  // console.log(`[SOCKET EMIT] device-status for`, device.endpoint, state);
   if (ioInstance) ioInstance.emit('device-status', { endpoint: device.endpoint, state });
 }
 

@@ -116,6 +116,7 @@ export function useTasmotaTimers({ socket, getApiRoute }) {
         })
 
         socket.on('device-status', ({ endpoint, state }) => {
+        // console.log('[DEVICE STATUS]', endpoint, state);
         deviceStates[endpoint] = state;
         });
     }
