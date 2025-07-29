@@ -2,12 +2,12 @@ const db = require('../../db/db');
 const User = require('../models/User');
 
 const userDAL = {
-  createUser: ({ username, email }) => {
+  createUser: ({ username, email, passwordHash }) => {
     const now = new Date().toISOString();
     const res = db.run(
-      `INSERT INTO users (username, email, active, created_at)
-       VALUES (?, ?, 1, ?)`,
-      username, email || null, now
+      `INSERT INTO users (username, email, passwordHash, active, created_at)
+      VALUES (?, ?, ?, 1, ?)`,
+      username, email || null, passwordHash, now
     );
     return userDAL.getUserById(res.lastInsertRowid);
   },

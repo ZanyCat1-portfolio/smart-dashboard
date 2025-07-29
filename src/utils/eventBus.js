@@ -83,7 +83,13 @@ eventBus.on('device:created', device => {
 });
 
 eventBus.on('device:reactivated', device => {
-  if (ioInstance) ioInstance.emit('device:reactivated', device);
+  // if (ioInstance) ioInstance.emit('device:reactivated', device);
+  if (ioInstance) ioInstance.emit('device:updated', device);
+});
+
+eventBus.on('device:updated', device => {
+  // if (ioInstance) ioInstance.emit('device:reactivated', device);
+  if (ioInstance) ioInstance.emit('device:updated', device);
 });
 
 eventBus.on('device:deactivated', device => {

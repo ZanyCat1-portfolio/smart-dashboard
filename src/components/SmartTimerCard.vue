@@ -1,5 +1,7 @@
 <template>
   <BaseDeviceCard
+    :tabindex="!sessionState.user ? 0 : -1"
+    :class="{ ghosted: !sessionState.user }"
     :label="timer.label || 'Timer'"
     :verified="true"
     deviceType="timer"
@@ -7,6 +9,7 @@
   >
     <template #actions>
       <SmartTimer
+        :require-auth="!sessionState.user"
         :timer="timer"
         @start="startTimer"
         @pause="pauseTimer"
@@ -15,6 +18,7 @@
         @cancel="cancelTimer"
       />
       <RecipientsSelector
+        :require-auth="!sessionState.user"
         :timer-id="timer.id"
         :users="Object.values(usersApi.users)"
         :devices="Object.values(devicesApi.devices)"
@@ -31,6 +35,7 @@ import BaseDeviceCard from './BaseDeviceCard.vue'
 import SmartTimer from './SmartTimer.vue'
 import RecipientsSelector from './RecipientsSelector.vue'
 import { isLive } from '../utils/utils.js'
+import { state as sessionState } from '../composables/useSessions'
 
 export default {
   name: 'SmartTimerCard',
@@ -49,11 +54,31 @@ export default {
       // users: []
     }
   },
+    watch: {
+    'timer.state': {
+      immediate: true,
+      handler(newState) {
+        if (newState === 'running') {
+          // Start the interval
+          if (!this.intervalId) {
+            this.intervalId = setInterval(() => {
+              this.now = Date.now();
+            }, 1000);
+          }
+        } else {
+          // Stop the interval
+          if (this.intervalId) {
+            clearInterval(this.intervalId);
+            this.intervalId = null;
+          }
+          // (Optional: update `now` one last time on pause/finish)
+          this.now = Date.now();
+        }
+      }
+    }
+  },
   mounted() {
-    // Set up a 1s interval to trigger reactivity for countdown
-    this.intervalId = setInterval(() => {
-      this.now = Date.now();
-    }, 1000);
+    this.now = Date.now();
   },
   beforeUnmount() {
     if (this.intervalId) clearInterval(this.intervalId);
@@ -76,6 +101,7 @@ export default {
     }
   },
   computed: {
+    sessionState: () => sessionState,
     isTimerLive() {
       return isLive(this.timer);
     },
@@ -98,4 +124,3 @@ export default {
   }
 }
 </script>
-

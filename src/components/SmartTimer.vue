@@ -1,12 +1,14 @@
 <template>
   <div class="d-flex align-items-center mb-3 gap-2 flex-wrap timer-controls">
     <button
+    :tabindex="requireAuth && !sessionState.user ? -1 : 0"
       class="btn btn-primary"
       @click="onStartOrPause"
     >
       {{ timer.state === 'running' ? 'Pause Timer' : 'Start Timer' }}
     </button>
     <input
+    :tabindex="requireAuth && !sessionState.user ? -1 : 0"
       type="number"
       min="1"
       max="1440"
@@ -17,6 +19,7 @@
       @keydown.enter.prevent="onStartOrPause"
     />
     <button
+    :tabindex="requireAuth && !sessionState.user ? -1 : 0"
       class="btn btn-danger"
       @click="$emit('cancel')"
     >
@@ -30,16 +33,22 @@
 
 <script>
 import { formatDisplay } from '../utils/utils.js';
+import { state as sessionState } from '../composables/useSessions'
 
 export default {
   props: {
-    timer: { type: Object, required: true }
+    timer: { type: Object, required: true },
+    requireAuth: {
+      type: Boolean,
+      default: false
+    }
   },
   data() {
     return {
       inputMinutes: '',
       now: Date.now(),
-      intervalId: null
+      intervalId: null,
+      sessionState,
     }
   },
   computed: {

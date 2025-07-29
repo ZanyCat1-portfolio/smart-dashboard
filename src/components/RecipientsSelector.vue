@@ -4,7 +4,9 @@
       <label class="fw-bold">Add Recipient:</label>
     </div>
     <div class="d-flex mb-2 gap-2">
-      <select v-model="selectedUserId" class="form-select" style="max-width:200px;">
+      <select v-model="selectedUserId" class="form-select" style="max-width:200px;"
+        :tabindex="requireAuth && !sessionState.user ? -1 : 0"
+      >
         <option disabled value="">Select User…</option>
         <option v-for="user in users" :key="user.id" :value="user.id">{{ user.username }}</option>
       </select>
@@ -43,6 +45,8 @@ import socket from '../composables/useSocket'
 //   transports: ['websocket', 'polling'], 
 //   secure: true 
 // });
+import { state as sessionState } from '../composables/useSessions'
+
 
 export default {
   name: 'RecipientsSelector',
@@ -51,12 +55,17 @@ export default {
     users: { type: Array, required: true },
     devices: { type: Array, required: true },
     recipients: { type: Array, default: () => [] },
-    smartTimersApi: { type: Object, required: true }
+    smartTimersApi: { type: Object, required: true },
+    requireAuth: {
+      type: Boolean,
+      default: false
+    }
   },
   data() {
     return {
       selectedUserId: '',
-      loading: false
+      loading: false,
+      sessionState,
     }
   },
   computed: {

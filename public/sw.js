@@ -1,3 +1,4 @@
+// v2
 self.addEventListener('push', function(event) {
   let data = {};
   try { data = event.data.json(); } catch {}
@@ -49,7 +50,7 @@ self.addEventListener('push', function(event) {
         break;
       case "timerFinished":
         title = `Timer Finished: ${label}`;
-        body = `Timer '${label}' has finished.`;
+        body = `Timer '${label}' has finished.\nDuration: ${duration}\nShould have lapsed at ${endTime}`;
         break;
       default:
         title = "Timer Alert";

@@ -65,40 +65,22 @@ export function useSmartTimers({ socket }) {
     // stop querying db every time, start returning inmem db that queries at startup
     if (socket) {
         socket.on('smart-timer-update', (timer) => {
-            // console.log('[SMART TIMER UPDATE]', timer);
-            if (['pending', 'running', 'paused'].includes(timer.state)) {
-                smartTimers[timer.id] = timer;
-            } else {
-                // Remove finished/canceled timers from state
-                delete smartTimers[timer.id];
-            }
+            smartTimers[timer.id] = timer;
         });
 
         socket.on('smart-timer-snapshot', (timersArray) => {
-        const arr = Array.isArray(timersArray[0]) ? timersArray[0] : timersArray;
+            const arr = Array.isArray(timersArray[0]) ? timersArray[0] : timersArray;
 
-        // Clear existing keys
-        Object.keys(smartTimers).forEach(id => delete smartTimers[id]);
+            // Clear existing keys
+            Object.keys(smartTimers).forEach(id => delete smartTimers[id]);
 
-        // Assign each new timer
-        arr.forEach(timer => {
-            if (timer?.id != null) {
-            smartTimers[timer.id] = timer;
-            }
+            // Assign each new timer
+            arr.forEach(timer => {
+                if (timer?.id != null) {
+                smartTimers[timer.id] = timer;
+                }
+            });
         });
-
-        console.log('[FRONTEND] Updated smartTimers:', smartTimers);
-        console.log("[] 3", Date.now())
-        });
-
-
-        // socket.on('smartTimers:snapshot', (timersArray) => {
-        //     const arr = Array.isArray(timersArray[0]) ? timersArray[0] : timersArray;
-        //     Object.keys(smartTimers).forEach(id => { delete smartTimers[id]; });
-        //     arr.forEach(timer => {
-        //         smartTimers[timer.id] = timer;
-        //     });
-        // });
 
     }
 

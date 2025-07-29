@@ -1,6 +1,6 @@
 import { reactive, readonly } from 'vue'
 
-const state = reactive({
+export const state = reactive({
     user: null
 })
 
@@ -18,6 +18,7 @@ export function useSession() {
     }
 
     async function login(username, password) {
+        console.log("IS THIS LOGIN GETTING CALLED")
         const res = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -26,6 +27,7 @@ export function useSession() {
         if (res.ok) {
             const json = await res.json()
             state.user = json.user
+            localStorage.setItem('user', JSON.stringify(state.user));
             return state.user // <--- return user object!
         }
         return null
@@ -37,7 +39,8 @@ export function useSession() {
     }
 
     async function register(username, password) {
-        const res = await fetch('/api/auth/register', {
+        console.log("username/password:", username, password)
+        const res = await fetch('/api/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
@@ -45,14 +48,13 @@ export function useSession() {
         console.log('res is: ', res)
         if (res.ok) {
             // Fetch session or parse user from response as needed
-            await fetchSession()
-            return state.user // <--- return user object!
+            return true
         }
-        return null
+        return false
     }
 
     return {
-        user: readonly(state.user),
+        state,
         fetchSession,
         login,
         logout,

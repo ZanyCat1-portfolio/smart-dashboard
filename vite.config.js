@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import fs from 'fs'
 import path from 'path'
+import { laodEnv } from 'vite'
 
 export default defineConfig(({ mode }) => {
   // Load environment variables for the current mode
@@ -11,6 +12,8 @@ export default defineConfig(({ mode }) => {
 
   // Only load certs if running in dev and they exist
   let httpsConfig = false
+
+  console.log("FRONTEND env.VITE_PORT: ", env.VITE_PORT)
   try {
     const key = fs.readFileSync(path.resolve(__dirname, 'cert/dev-key.pem'))
     const cert = fs.readFileSync(path.resolve(__dirname, 'cert/dev-cert.pem'))
@@ -37,6 +40,7 @@ export default defineConfig(({ mode }) => {
       }
     ],
     server: {
+      port: env.VITE_PORT || 5173,
       https: httpsConfig,
       proxy: {
         '/api': {

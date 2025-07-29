@@ -1,7 +1,7 @@
 // src/utils/smartTimer-logic.js
-const { timers } = require('../data/smartTimers');
+const { smartTimers } = require('../data/smartTimers');
 const smartTimerDAL = require('../dal/smartTimer-dal');
-const eventBus = require('./eventBus');
+// const eventBus = require('./eventBus');
 const { mqttClient } = require('../mqtt/mqtt-client');
 const { publishSmartTimerState } = require('./smartTimer-mqtt');
 
@@ -33,13 +33,26 @@ function finishTimerAndNotify(timerId, isLate = false) {
   clearTimerTimeout(timerId);
   const timer = smartTimerDAL.finishTimer(timerId);
   if (timer) {
-    timers[timer.id] = timer; // update in-mem store
+    smartTimers[timer.id] = timer; // update in-mem store
     eventBus.emit('timer:finished', timer);
     publishSmartTimerState(mqttClient, timer);
   }
 }
 
+function finishLateIfNeeded(timer) {
+  if (
+    timer.state === 'running' &&
+    timer.endTime && // note: check your spelling; sometimes it's end_time
+    new Date(timer.endTime) <= Date.now()
+  ) {
+    finishTimerAndNotify(timer.id, true); // true = late
+    return true;
+  }
+  return false;
+}
+
 module.exports = {
   scheduleTimerFinish,
   finishTimerAndNotify,
+  finishLateIfNeeded
 };

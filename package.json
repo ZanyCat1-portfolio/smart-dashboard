@@ -5,7 +5,7 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
-    "dev:backend": "cross-env NODE_ENV=development node --trace-warnings proxy-server.cjs",
+    "dev:backend": "cross-env NODE_ENV=development NODE_TLS_REJECT_UNAUTHORIZED=0 node --trace-warnings proxy-server.cjs",
     "dev:mosq": "docker rm -f mosquitto-dev 2>/dev/null || true && docker run -d --name mosquitto-dev -p 1883:1883 -v \"${PWD}/mosquitto.conf\":/mosquitto/config/mosquitto.conf:ro eclipse-mosquitto:2",
     "dev:full": "cross-env concurrently -k -n VITE,BACKEND -c cyan,green \"npm run dev\" \"npm run dev:backend\"",
     "_note": "Use `npm run build` to generate dist/ before running proxy-server.cjs in production"
@@ -22,7 +22,7 @@
     "express-list-endpoints": "^7.1.1",
     "express-session": "^1.18.2",
     "mqtt": "^5.13.0",
-    "node-fetch": "^3.3.2",
+    "node-fetch": "^2.7.0",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
     "vue": "^3.4.15",

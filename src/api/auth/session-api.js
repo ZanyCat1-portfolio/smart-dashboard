@@ -11,6 +11,7 @@ module.exports = () => {
     if (req.session.user) {
       res.json({ user: req.session.user });
     } else {
+      console.log(req.session)
       res.status(401).json({ error: 'Not logged in' });
     }
   });

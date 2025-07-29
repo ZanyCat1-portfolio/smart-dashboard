@@ -2,7 +2,6 @@
   <div v-if="!isRegistered" class="device-registration">
     <!-- Registration Form (unchanged) -->
     <h2>Register This Device</h2>
-    <h2> The value of isRegistered: {{ isRegistered }}</h2>
     <form @submit.prevent="registerDevice">
       <div>
         <label>Device Name</label>
@@ -21,7 +20,6 @@
   </div>
 
   <div v-else class="text-success mt-3">
-    <h2> The value of isRegistered: {{ isRegistered }}</h2>
     Device is already registered on this browser.
   </div>
 

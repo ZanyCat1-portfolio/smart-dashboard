@@ -35,6 +35,7 @@ module.exports = (io) => {
 
   // POST /api/devices/reactivate-or-register
   router.post('/reactivate-or-register', (req, res) => {
+    console.log("this is for new devices?")
     try {
       const { userId, name, pushSubscription } = req.body;
 
@@ -113,6 +114,7 @@ module.exports = (io) => {
 
   // Update device (full PUT)
   router.put('/:id', (req, res) => {
+    console.log("who ever calls this? new device?")
     try {
       const updated = deviceDAL.updateDevice(req.params.id, req.body);
       updateDeviceInMem(updated);
@@ -136,10 +138,13 @@ module.exports = (io) => {
       let device = deviceDAL.getDeviceById(deviceId);
       if (!device) return res.status(404).json({ error: 'Device not found' });
 
+      
       const updatedDevice = deviceDAL.updateDevice(deviceId, updates);
       updateDeviceInMem(updatedDevice);
 
-      // (emit events as before)
+      // devices[device.id] = device;
+      console.log("device-api emitting to eventBus.emit('device:updated'")
+      eventBus.emit('device:updated', updatedDevice);
 
       return res.json(updatedDevice);
     } catch (err) {

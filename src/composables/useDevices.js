@@ -5,8 +5,6 @@ import { getPushSubscription } from '../utils/push';
 const devices = reactive({})
 const base = import.meta.env.BASE_URL;
 
-// // now imported from /src/data/devices
-// const devices = reactive({});
 const currentDevice = computed(() => {
   const endpoint = localStorage.getItem('deviceEndpoint');
   // console.log("endpoint from localStorage:", endpoint);
@@ -79,7 +77,7 @@ export function useDevices({ socket }) {
       throw new Error(err.error || 'Failed to register device');
     }
     const device = await res.json();
-    devices[device.id] = device;
+    // devices[device.id] = device;
     localStorage.setItem('deviceEndpoint', pushSubscription.endpoint);
     // currentDevice.value = device;
     return device;
@@ -93,7 +91,7 @@ export function useDevices({ socket }) {
     });
     if (!res.ok) throw new Error('Failed to update device');
     const device = await res.json();
-    devices[device.id] = device;
+    // devices[device.id] = device;
     return device;
   }
 
@@ -127,7 +125,7 @@ export function useDevices({ socket }) {
         userId: user.id,
         name: deviceName,
         pushSubscription,
-        platform: navigator.userAgent,
+        // platform: navigator.userAgent,
         active: true
       });
     } else {
@@ -136,7 +134,7 @@ export function useDevices({ socket }) {
         userId: user.id,
         name: deviceName,
         pushSubscription,
-        platform: navigator.userAgent
+        // platform: navigator.userAgent
       });
     }
 
@@ -149,6 +147,8 @@ export function useDevices({ socket }) {
 
 
   async function unregisterDevice({ user }) {
+    // TODO: Unregistering device needs to remove recipient from smartTimer
+    
     if (!user || !user.id) throw new Error('Valid user object required');
     // 1. Try localStorage.deviceId first
     let deviceId = localStorage.getItem('deviceId');
@@ -185,7 +185,7 @@ export function useDevices({ socket }) {
     });
     if (!res.ok) throw new Error('Failed to deactivate device');
     const device = await res.json();
-    devices[device.id] = device;
+    // devices[device.id] = device;
     // Optionally: clear currentDevice if matches
     if (currentDevice.value?.id === deviceId) currentDevice.value = null;
     return device;
@@ -209,7 +209,7 @@ export function useDevices({ socket }) {
     const device = await res.json();
     // console.log("device:created, device is:", device)
     // console.log("device:created, devices before update are:", devices)
-    devices[device.id] = device;
+    // devices[device.id] = device;
     // console.log("device:created, devices after update are:", devices)
     return device;
   }
@@ -223,12 +223,15 @@ export function useDevices({ socket }) {
         // console.log("device:created, devices after update are:", devices)
       });
       socket.on('device:updated', device => {
+        console.log("does socket.on device:updated fire?")
           devices[device.id] = device;
       });
       socket.on('device:deactivated', device => {
+        console.log("does socket.on device:deactivated fire?")
           devices[device.id] = device;
       });
       socket.on('device:reactivated', device => {
+        console.log("does socket.on device:reactivated fire?")
         // console.log("device:reactivated, device is:", device)
         // console.log("device:reactivated, devices before update are:", devices)
           devices[device.id] = device;

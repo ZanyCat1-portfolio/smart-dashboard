@@ -16,7 +16,7 @@
 
       <div class="device-registration-section mb-4">
         <!-- Simple login form if not logged in -->
-        <div v-if="!isLoggedIn">
+        <div v-if="!sessionState.user">
           <div class="mb-2">
             <button
               class="btn btn-outline-primary me-2"
@@ -37,9 +37,10 @@
 
         <!-- Show DeviceRegistration only when logged in -->
         <div v-else>
+          <h2>Logged in as {{  sessionState.user.username }}</h2>
           <button @click="logout" class="btn btn-secondary mb-2">Log Out</button>
-          <DeviceRegistration v-if="user"
-            :user="user"
+          <DeviceRegistration v-if="sessionState.user"
+            :user="sessionState.user"
             :devices-api="devicesApi"
             :users-api="usersApi"
           />
@@ -69,20 +70,25 @@
 
       <div v-else>
         <!-- SMART TIMERS SECTION -->
-      <div id="smartTimers" class="card mb-4" style="scroll-margin-top: 4rem">
-        <div>
-          <div
-            class="card-header d-flex justify-content-between align-items-center"
+        <div id="smartTimers" class="card mb-4" style="scroll-margin-top: 4rem">
+          <div>
+          <button
+            class="card-header d-flex justify-content-between align-items-center w-100 text-start"
             @click="toggleGroup('smartTimers')"
+            :aria-expanded="openGroups.smartTimers"
+            :aria-label="openGroups.smartTimers ? 'Collapse Smart Timers' : 'Expand Smart Timers'"
+            type="button"
             style="cursor: pointer;"
           >
-            <h2 class="mb-0 text-start">Smart Timers</h2>
-            <span>
-              <i v-if="openGroups.smartTimers" class="bi bi-chevron-up"></i>
-              <i v-else class="bi bi-chevron-down"></i>
-            </span>
-          </div>
-          <SmartTimerCreateForm @create="handleTimerCreate" />
+            <h2 class="mb-0">Smart Timers</h2>
+            <i :class="openGroups.smartTimers ? 'bi bi-chevron-up' : 'bi bi-chevron-down'"></i>
+          </button>
+
+          <SmartTimerCreateForm @create="handleTimerCreate"
+            :require-auth="!sessionState.user" 
+            :tabindex="!sessionState.user ? 0 : -1"
+            :class="{ ghosted: !sessionState.user }"
+          />
           <div v-show="openGroups.smartTimers" class="card-body">
             <div class="row row-cols-1 row-cols-md-2 g-4">
               <div v-for="timer in smartTimersApi.visibleSmartTimers" :key="timer.id" class="col">
@@ -92,58 +98,52 @@
                   :users-api="usersApi"
                   :devices-api="devicesApi"
                 />
-                <!-- <SmartTimerCard
-                  :timer="timer"
-                  :smart-timers-api="smartTimersApi"
-                  :users-api="usersApi"
-                  :devices-api="devicesApi"
-                /> -->
               </div>
             </div>
           </div>
         </div>
       </div>
 
-        <!-- DEVICE GROUPS -->
+      <!-- DEVICE GROUPS -->
+      <div
+        v-for="(devices, type) in groupedDevices"
+        :key="type"
+        :id="type"
+        :ref="`group-${type}`"
+        class="card mb-4"
+        style="scroll-margin-top: 4rem;"
+      >
         <div
-          v-for="(devices, type) in groupedDevices"
-          :key="type"
-          :id="type"
-          :ref="`group-${type}`"
-          class="card mb-4"
-          style="scroll-margin-top: 4rem;"
+          class="card-header d-flex justify-content-between align-items-center"
+          @click="toggleGroup(type)"
+          style="cursor: pointer;"
         >
-          <div
-            class="card-header d-flex justify-content-between align-items-center"
-            @click="toggleGroup(type)"
-            style="cursor: pointer;"
-          >
-            <h2 class="mb-0">{{ formatType(type) }}</h2>
-            <span>
-              <i v-if="openGroups[type]" class="bi bi-chevron-up"></i>
-              <i v-else class="bi bi-chevron-down"></i>
-            </span>
-          </div>
+          <h2 class="mb-0">{{ formatType(type) }}</h2>
+          <span>
+            <i v-if="openGroups[type]" class="bi bi-chevron-up"></i>
+            <i v-else class="bi bi-chevron-down"></i>
+          </span>
+        </div>
 
-          <div v-show="openGroups[type]" class="card-body">
-            <div class="row row-cols-1 row-cols-md-2 g-4">
-              <div v-for="device in devices" :key="device.endpoint" class="col">
-                <component
-                  :is="getCardComponent(device)"
-                  :device="device"
-                  :state="deviceStates[device.endpoint]"
-                  :theme="theme"
-                  :get-api-route="getApiRoute"
-                  :timer-state="timerStates[device.endpoint]"
-                  :timer-display="timerDisplays[device.endpoint]"
-                  :on-start-timer="(minutes) => startTimer(device, minutes)"
-                  :on-add-to-timer="(minutes) => addToTimer(device, minutes)"
-                  :on-cancel-timer="() => cancelTimer(device)"
-                  @refresh="fetchStatus(device)"
-                />
-              </div>
+        <div v-show="openGroups[type]" class="card-body">
+          <div class="row row-cols-1 row-cols-md-2 g-4">
+            <div v-for="device in devices" :key="device.endpoint" class="col">
+              <component
+                :is="getCardComponent(device)"
+                :device="device"
+                :state="deviceStates[device.endpoint]"
+                :theme="theme"
+                :get-api-route="getApiRoute"
+                :timer-state="timerStates[device.endpoint]"
+                :timer-display="timerDisplays[device.endpoint]"
+                :on-start-timer="(minutes) => startTimer(device, minutes)"
+                :on-add-to-timer="(minutes) => addToTimer(device, minutes)"
+                :on-cancel-timer="() => cancelTimer(device)"
+                @refresh="fetchStatus(device)"
+              />
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -165,10 +165,10 @@ import { useUsers } from './composables/useUsers'
 import { refreshLoginTimer } from './utils/utils'
 import LoginForm from './components/LoginForm.vue'
 import RegisterForm from './components/RegisterForm.vue'
+import { state as sessionState, useSession } from './composables/useSessions'
 
 const TIMEOUT_MINUTES = 15;
 const LOGIN_TIMEOUT = TIMEOUT_MINUTES * 60 * 1000;
-
 
 const base = import.meta.env.BASE_URL
 
@@ -199,12 +199,11 @@ export default {
       devicesApi: null,
       usersApi: null,
       username: '',
-      isLoggedIn: false,
-      user: null,
       loginError: null,
       loginTimer: null,
       userSuggestions: JSON.parse(localStorage.getItem('usernames') || '[]'),
       showRegister: false,
+      sessionState
     }
   },
   computed: {
@@ -233,7 +232,7 @@ export default {
     },
   },
 async mounted() {
-  this.logout()
+  // this.logout()
 
   // 1. Register all composables immediately!
   const tasmotaApi = useTasmotaTimers({ socket, getApiRoute: this.getApiRoute });
@@ -274,6 +273,13 @@ async mounted() {
 
   this.loadingDevices = false;
 
+  const stored = localStorage.getItem('user');
+  if (stored) {
+    sessionState.user = JSON.parse(stored); // <--- set your global state!
+  } else {
+    sessionState.user = null;
+  }
+
 },
 
 beforeUnmount() {
@@ -289,18 +295,18 @@ watch: {
 
 methods: {
   onLoginSuccess(user) {
-    this.user = user;
-    this.isLoggedIn = true;
+    console.log("does ONLOGINSUCCESS EVER GET CALLED APP.VUE")
+    sessionState.user = user
     localStorage.setItem('user', JSON.stringify(user));
     this.startLoginTimer();
   },
   onRegisterSuccess(user) {
-    this.user = user;
-    this.isLoggedIn = true;
+    sessionState.user = user
     localStorage.setItem('user', JSON.stringify(user));
     this.startLoginTimer();
   },
   async login() {
+    console.log('NO THIS IS GETTING CALL')
     this.loginError = null;
     const username = this.username.trim();
     console.log("on login, what is username: ", !!username)
@@ -314,8 +320,7 @@ methods: {
         user = await this.usersApi.createUser(username);
         if (!user) throw new Error("Failed to create user");
       }
-      this.user = user;
-      this.isLoggedIn = true;
+      sessionState.user = user
 
       // 2. Save username to suggestions
       let suggestions = this.userSuggestions;
@@ -333,10 +338,9 @@ methods: {
       this.loginError = e.message || "Login failed";
     }
   },
-  logout() {
-    this.isLoggedIn = false;
-    this.user = null;
-    this.username = '';
+  async logout() {
+    await useSession().logout();
+    localStorage.setItem('user', '');
     this.clearLoginTimer();
   },
   startLoginTimer() {

@@ -7,6 +7,7 @@ const { mqttClient } = require('../../../src/mqtt/mqtt-client');
 const { publishSmartTimerState } = require('../../../src/utils/smartTimer-mqtt');
 const { exportHistoricTimersToCSV } = require('../../utils/export');
 const { smartTimers } = require('../../data/smartTimers');
+const requireAuth = require('../../middleware/auth')
 // const { scheduleTimerFinish, finishTimerAndNotify, clearTimerTimeout } = require('../../utils/smartTimer-logic');
 
 // /api/smart-timers due to proxy-server.cjs and index.js use statements
@@ -310,7 +311,7 @@ module.exports = (io) => {
   });
 
   // Add recipient to timer
-  router.post('/:id/recipients', async (req, res) => {
+  router.post('/:id/recipients', requireAuth, async (req, res) => {
     const timerId = req.params.id;
     const { userId, deviceId, type, target } = req.body;
     if (!userId) return res.status(400).json({ error: 'userId required' });

@@ -3,21 +3,24 @@ const userDAL = require('../../dal/user-dal');
 const deviceDAL = require('../../dal/device-dal');
 const User = require('../../models/User');
 const eventBus = require('../../utils/eventBus');
-const users = require('../../data/users');
+const { users } = require('../../data/users');
 
 module.exports = (io) => {
   const router = express.Router();
 
   // Register a new user
-  router.post('/', (req, res) => {
-    const { username, email } = req.body;
+  router.post('/', async (req, res) => {
+    const { username, password, email } = req.body;
 
     if (!username || typeof username !== 'string' || !username.trim()) {
       return res.status(400).json({ error: 'username (string) required' });
     }
+    if (!password || typeof password !== 'string') {
+      return res.status(400).json({ error: 'password (string) required' });
+    }
 
     try {
-      // Search in in-mem users
+      // Username/email uniqueness check
       const existingUser = Object.values(users).find(u => u.username === username);
       if (existingUser) {
         return res.status(409).json({ error: 'Username already exists', user: existingUser });
@@ -29,14 +32,18 @@ module.exports = (io) => {
         }
       }
 
-      // Create in persistent DB
-      const user = userDAL.createUser({ username, email });
-      // Add to in-mem users
+      // Hash password
+      const bcrypt = require('bcrypt');
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      // Create in persistent DB (pass passwordHash, not password)
+      const user = userDAL.createUser({ username, email, passwordHash });
       users[user.id] = user;
-      // Emit create event
+      console.log("added", user, "to users: ", users)
       eventBus.emit('user:created', user);
 
-      res.status(201).json(user);
+      // Optionally, you may want to return {success: true} for auth-style, or full user for admin-style
+      res.status(201).json({ success: true, user });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

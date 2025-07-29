@@ -153,7 +153,6 @@ io.on('connection', (socket) => {
 
   const { smartTimers } = require('./src/data/smartTimers.js');
   socket.emit('smart-timer-snapshot', Object.values(smartTimers));
-  console.log("[PROXY-SERVER.CJS SOCKET EMIT] 2", Date.now())
   // console.log('[SOCKET.IO] Sent smart-timer-snapshot:', smartTimers);
 
   // Devices:
@@ -168,13 +167,15 @@ io.on('connection', (socket) => {
   });
 
   const session = require('express-session');
+  const oneDay = 1000 * 60 * 60 * 24;
+  const daysLoggedIn = 30
   app.use(session({
     secret: 'your-secret-here',
     resave: false,
     saveUninitialized: false,
     rolling: true,
     cookie: {
-      maxAge: 15 * 60 * 1000,
+      maxAge: oneDay * daysLoggedIn,
       httpOnly: true,
     }
   }));
