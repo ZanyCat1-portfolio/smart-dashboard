@@ -1,4 +1,4 @@
-import './assets/styles/global.css'
+// import './assets/styles/global.css'
 
 if ('serviceWorker' in navigator) {
   // Register the SW immediately on page load

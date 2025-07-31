@@ -44,12 +44,12 @@ export default defineConfig(({ mode }) => {
       https: httpsConfig,
       proxy: {
         '/api': {
-          target: 'https://192.168.4.23:8080',
+          target: 'https://localhost:8080',
           changeOrigin: true,
           secure: false, // allow self-signed cert
         },
         '/socket.io': {
-          target: 'https://192.168.4.23:8080',
+          target: 'https://localhost:8080',
           ws: true,
           changeOrigin: true,
           secure: false, // allow self-signed cert

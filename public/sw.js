@@ -32,25 +32,26 @@ self.addEventListener('push', function(event) {
 
   if (data.type && data.timer) {
     const label = data.timer.label || 'Unnamed';
+    const description = data.timer.description || 'No description';
     const duration = formatDuration(data.timer.duration || data.timer.initialDuration || 0);
     const endTime = formatEndTime(data.timer.endTime);
 
     switch (data.type) {
       case "timerStarted":
         title = `Timer Started: ${label}`;
-        body = `Timer '${label}' started.\nDuration: ${duration}\nWill lapse at ${endTime}`;
+        body = `Timer '${label}' started.\nDuration: ${duration}\nWill lapse at ${endTime}\nDescription: ${description}`;
         break;
       case "timerUnpaused":
         title = `Timer Unpaused: ${label}`;
-        body = `Timer '${label}' resumed.\nDuration: ${duration}\nWill lapse at ${endTime}`;
+        body = `Timer '${label}' resumed.\nDuration remaining: ${duration}\nWill lapse at ${endTime}\nDescription: ${description}`;
         break;
       case "timerPaused":
         title = `Timer Paused: ${label}`;
-        body = `Timer '${label}' is paused.`;
+        body = `Timer '${label}' is paused.\nDescription: ${description}`;
         break;
       case "timerFinished":
         title = `Timer Finished: ${label}`;
-        body = `Timer '${label}' has finished.\nDuration: ${duration}\nShould have lapsed at ${endTime}`;
+        body = `Timer '${label}' has finished.\nDuration: ${duration}\nShould have lapsed at ${endTime}\nDescription: ${description}`;
         break;
       default:
         title = "Timer Alert";

@@ -1,6 +1,7 @@
 // src/composables/useDevices.js
 import { reactive, computed, ref } from 'vue';
 import { getPushSubscription } from '../utils/push';
+import { authFetch } from '../utils/utils';
 
 const devices = reactive({})
 const base = import.meta.env.BASE_URL;
@@ -67,7 +68,7 @@ export function useDevices({ socket }) {
       throw new Error('userId and valid pushSubscription required');
     }
     // Try reactivate-or-register (preferred)
-    const res = await fetch(`${base}api/devices/reactivate-or-register`, {
+    const res = await authFetch(`${base}api/devices/reactivate-or-register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, name, pushSubscription, platform }),
@@ -84,7 +85,7 @@ export function useDevices({ socket }) {
   }
 
   async function updateDevice(deviceId, data) {
-    const res = await fetch(`${base}api/devices/${deviceId}`, {
+    const res = await authFetch(`${base}api/devices/${deviceId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -95,12 +96,10 @@ export function useDevices({ socket }) {
     return device;
   }
 
-
-
   async function registerOrUpdateDevice({ user, deviceName }) {
     if (!user || !user.id) throw new Error('Valid user object required');
     // 1. Get pushSubscription
-    const pushSubscription = await getPushSubscription(); // Define/Import this helper!
+    const pushSubscription = await getPushSubscription();
     const endpoint = pushSubscription?.endpoint;
     if (!endpoint) throw new Error('No push subscription endpoint.');
 
@@ -145,40 +144,9 @@ export function useDevices({ socket }) {
     return resultDevice;
   }
 
-
-  async function unregisterDevice({ user }) {
-    // TODO: Unregistering device needs to remove recipient from smartTimer
-    
-    if (!user || !user.id) throw new Error('Valid user object required');
-    // 1. Try localStorage.deviceId first
-    let deviceId = localStorage.getItem('deviceId');
-    let device = deviceId && devices[deviceId] ? devices[deviceId] : null;
-
-    // 2. If not found, fall back to current pushSubscription.endpoint
-    if (!device) {
-      const pushSubscription = await getPushSubscription();
-      const endpoint = pushSubscription?.endpoint;
-      if (!endpoint) throw new Error('No push subscription endpoint.');
-      device = Object.values(devices).find(
-        d => d.pushSubscription?.endpoint === endpoint
-      );
-    }
-
-    // 3. If still not found, error
-    if (!device || !device.id) throw new Error('Device not found');
-
-    // 4. Deactivate device (active: false, clear push)
-    await deactivateDevice(device.id);
-
-    return true;
-  }
-
-
-
-
   async function deactivateDevice(deviceId) {
     // Soft deactivation (active: false)
-    const res = await fetch(`${base}api/devices/${deviceId}`, {
+    const res = await authFetch(`${base}api/devices/${deviceId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: false }),
@@ -192,7 +160,7 @@ export function useDevices({ socket }) {
   }
 
   async function deleteDevice(deviceId) {
-    const res = await fetch(`${base}api/devices/${deviceId}`, { method: 'DELETE' });
+    const res = await authFetch(`${base}api/devices/${deviceId}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete device');
     delete devices[deviceId];
     if (currentDevice.value?.id === deviceId) currentDevice.value = null;
@@ -207,10 +175,6 @@ export function useDevices({ socket }) {
     });
     if (!res.ok) return null;
     const device = await res.json();
-    // console.log("device:created, device is:", device)
-    // console.log("device:created, devices before update are:", devices)
-    // devices[device.id] = device;
-    // console.log("device:created, devices after update are:", devices)
     return device;
   }
 
@@ -248,7 +212,6 @@ export function useDevices({ socket }) {
       });
   }
 
-
   // --- Public API ---
   return {
     devices,
@@ -260,7 +223,6 @@ export function useDevices({ socket }) {
     registerDevice,
     updateDevice,
     registerOrUpdateDevice,
-    unregisterDevice,
     deactivateDevice,
     deleteDevice,
     findDeviceByEndpoint,

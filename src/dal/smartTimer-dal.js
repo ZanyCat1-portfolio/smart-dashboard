@@ -6,15 +6,15 @@ const recipientDAL = require('./recipient-dal')
 const smartTimerDAL = {
 
   createSmartTimer: (data) => {
-    const { label, duration, state = 'pending', startTime, endTime } = data;
+    const { label, description, duration, state = 'pending', startTime, endTime } = data;
     const now = new Date().toISOString();
     const safeStartTime = startTime || null;
     const safeEndTime = endTime || null;
 
     const res = db.run(
-      `INSERT INTO smartTimers (label, duration, initial_duration, state, start_time, end_time, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [label, duration, duration, state, safeStartTime, safeEndTime, now, now]
+      `INSERT INTO smartTimers (label, description, duration, initial_duration, state, start_time, end_time, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [label, description, duration, duration, state, safeStartTime, safeEndTime, now, now]
     );
 
     // Return a timer object with ALL expected properties, using camelCase for frontend
@@ -159,7 +159,8 @@ const smartTimerDAL = {
     const now = new Date().toISOString();
     smartTimerDAL.updateSmartTimer(id, {
       state: 'canceled',
-      end_time: now
+      end_time: now,
+      active: 0
     });
     return smartTimerDAL.getSmartTimerById(id);
   },
@@ -168,7 +169,8 @@ const smartTimerDAL = {
     const now = new Date().toISOString();
     smartTimerDAL.updateSmartTimer(id, {
       state: 'finished',
-      end_time: now
+      end_time: now,
+      active: 0
     });
     return smartTimerDAL.getSmartTimerById(id);
   },

@@ -11,27 +11,33 @@
     <button type="submit">Login</button>
     <p v-if="error">{{ error }}</p>
   </form>
+
 </template>
 
-<script setup>
-import { ref } from 'vue'
+<script>
 import { useSession } from '../composables/useSessions'
 
-const emit = defineEmits(['login-success'])
-
-const username = ref('')
-const password = ref('')
-const error = ref('')
-
-const { login } = useSession()
-
-async function handleLogin() {
-  error.value = ''
-  const user = await login(username.value, password.value)
-  if (!user) {
-    error.value = 'Invalid username or password'
-  } else {
-    emit('login-success', user)
+export default {
+  name: 'LoginForm',
+  data() {
+    return {
+      username: '',
+      password: '',
+      error: ''
+    }
+  },
+  methods: {
+    async handleLogin() {
+      this.error = ''
+      const { login } = useSession()
+      const user = await login(this.username, this.password)
+      console.log("What is user?", user)
+      if (!user) {
+        this.error = 'Invalid username or password'
+      } else {
+        this.$emit('login-success', user)
+      }
+    }
   }
 }
 </script>

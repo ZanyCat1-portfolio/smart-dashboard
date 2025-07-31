@@ -1,7 +1,8 @@
 // src/composables/useSocket.js
 import { io } from 'socket.io-client'
 
-const socket = io('https://192.168.4.23:8080', {
+const origin = window.location.origin.replace(/^http/, 'ws');
+const socket = io(origin, {
   path: '/socket.io',
   transports: ['websocket', 'polling'],
   secure: true,

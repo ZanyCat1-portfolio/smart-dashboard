@@ -4,7 +4,7 @@ const deviceDAL = require('../dal/device-dal');
 const fetch = require('node-fetch');
 
 const PORT = process.env.VITE_PORT || 5173;
-const API_BASE = `https://localhost:${PORT}`;
+const API_BASE = process.env.API_BASE || `https://localhost:${PORT}`;
 
 const base = `${API_BASE}${process.env.BASE_PATH || '/'}`;
 
@@ -40,8 +40,9 @@ async function sendPushToRecipients(recipients, payload) {
 async function sendWebPush(recipient, payload) {
   if (!recipient.target) return;
   try {
-    await webpush.sendNotification(recipient.target, JSON.stringify(payload));
-    logInfo('WebPush sent to recipient:', recipient.id);
+    const response = await webpush.sendNotification(recipient.target, JSON.stringify(payload));
+    // await webpush.sendNotification(recipient.target, JSON.stringify(payload));
+    // logInfo('WebPush sent to recipient:', recipient.id);
   } catch (err) {
     logError('WebPush failed for recipient:', recipient.id, err.statusCode, err.message);
 

@@ -23,6 +23,12 @@ COPY --from=builder /app/public  ./public
 COPY --from=builder /app/proxy-server.cjs   ./
 COPY --from=builder /app/verify-devices.js  ./
 
+# Copy the entire src folder (for backend/server imports)
+COPY --from=builder /app/src ./src
+
+# Copy /db folder
+COPY --from=builder /app/db ./db
+
 # Copy package.json & lockfile so we can install only runtime deps
 COPY package*.json ./
 

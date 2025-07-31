@@ -25,7 +25,7 @@ function loadDevices() {
 
 let deviceMap = loadDevices(); // Cached at startup
 fs.watchFile(DEVICES_PATH, () => {
-  devLog('[Devices] Reloading device map...');
+  console.log('[Devices] Reloading device map...');
   deviceMap = loadDevices();
 });
 

@@ -1,6 +1,6 @@
 // useSmartTimers.js
 import { reactive, computed, ref } from 'vue'
-
+import { authFetch } from '../utils/utils';
 
 
 const smartTimers = reactive({})
@@ -24,7 +24,7 @@ function mmss(sec) {
 export function useSmartTimers({ socket }) {
 
     async function startTimer(timerId, duration) {
-        await fetch(`${base}api/smart-timers/${timerId}/start`, {
+        await authFetch(`${base}api/smart-timers/${timerId}/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ duration })
@@ -32,12 +32,12 @@ export function useSmartTimers({ socket }) {
     }
 
     async function pauseTimer(timerId) {
-        await fetch(`${base}api/smart-timers/${timerId}/pause`, { method: 'POST' });
+        await authFetch(`${base}api/smart-timers/${timerId}/pause`, { method: 'POST' });
     }
 
     async function unpauseTimer(timerId) {
         // console.log("DID ALSO GET HERE?")
-        await fetch(`${base}api/smart-timers/${timerId}/unpause`, { method: 'POST' });
+        await authFetch(`${base}api/smart-timers/${timerId}/unpause`, { method: 'POST' });
     }
     
     async function cancelTimer(timerId) {
@@ -45,7 +45,7 @@ export function useSmartTimers({ socket }) {
     }
     
     async function addRecipient(timerId, userId, deviceId, type = 'webpush', target = deviceId) {
-        await fetch(`/api/smart-timers/${timerId}/recipients`, {
+        await authFetch(`/api/smart-timers/${timerId}/recipients`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId, deviceId, type, target })
@@ -53,7 +53,7 @@ export function useSmartTimers({ socket }) {
     }
 
     async function removeRecipient(timerId, recipientId) {
-        await fetch(`/api/smart-timers/${timerId}/recipients/${recipientId}`, {
+        await authFetch(`/api/smart-timers/${timerId}/recipients/${recipientId}`, {
             method: 'DELETE'
         });
     }

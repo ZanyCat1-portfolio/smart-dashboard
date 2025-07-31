@@ -1,48 +1,59 @@
 <template>
   <div
-    class="card base-device-card shadow-sm mb-4 mx-auto"
+    class="card base-device-card shadow-sm mx-auto"
     :data-device-type="deviceType"
   >
-    <!-- Card Header: Icon, Name, Verified badge -->
     <div class="card-header d-flex justify-content-between align-items-center py-2 px-3">
       <div class="d-flex align-items-center w-100" style="min-width:0;">
         <span v-if="icon" class="me-2 flex-shrink-0">
           <slot name="icon"><i :class="icon"></i></slot>
         </span>
         <span
-          class="fw-bold card-title flex-grow-1"
+          class="fw-bold flex-grow-1 no-wrap"
+          :class="isHistorical ? 'timer-title timer-title-historical' : 'timer-title timer-title-active'"
           :title="label"
         >{{ label }}</span>
+
+
+        <span
+          class="badge"
+          :class="{
+            'bg-secondary': timerState === 'finished',
+            'bg-danger': timerState === 'canceled'
+          }"
+          style="font-size: 0.85em;"
+        >
+          {{ timerState.charAt(0).toUpperCase() + timerState.slice(1) }}
+        </span>
+
+        
       </div>
       <slot name="status"></slot>
     </div>
 
-    <!-- Main Card Body: Actions/Controls & Default Content -->
-    <div class="card-body p-3 d-flex flex-column align-items-center">
+    <div class="card-body p-3 pb-0 d-flex flex-column align-items-center">
       <slot name="actions"></slot>
-      <slot /> <!-- This default slot enables Timer and other child content to appear -->
+      <slot />
     </div>
 
-    <!-- Optional Card Footer (for timers, metadata, etc) -->
     <div class="card-footer text-center py-2 px-3" v-if="$slots.footer">
       <slot name="footer"></slot>
     </div>
   </div>
 </template>
 
-
-<script setup>
-/**
- * BaseDeviceCard.vue
- * Responsive, mobile-first base for all device cards.
- * Uses Bootstrap classes and minimal scoped style for consistency.
- */
-defineProps({
-  label: { type: String, required: true },
-  verified: { type: Boolean, default: false },
-  deviceType: { type: String, default: "" },
-  icon: { type: String, default: "" },
-});
+<script>
+export default {
+  name: "BaseDeviceCard",
+  props: {
+    label: { type: String, required: true },
+    verified: { type: Boolean, default: false },
+    deviceType: { type: String, default: "" },
+    icon: { type: String, default: "" },
+    isHistorical: { type: Boolean, default: false },
+    timerState: { type: String, default: '' }
+  }
+}
 </script>
 
 <style scoped>
@@ -51,7 +62,7 @@ defineProps({
   max-width: 420px;
   min-width: 0;
   box-sizing: border-box;
-  margin: 0 auto 1.5rem auto;
+  margin: 0 auto 0 auto;
   border-radius: 1rem;
   /* Responsive shadow, border */
 }

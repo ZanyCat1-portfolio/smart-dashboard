@@ -5,6 +5,7 @@ class SmartTimer extends EventEmitter {
     super();
     this.id = row.id;
     this.label = row.label;
+    this.description = row.description;
     this.duration = row.duration;
     this.initialDuration = row.initialDuration !== undefined ? row.initialDuration : row.initial_duration;
     this.state = row.state || 'pending';

@@ -1,5 +1,5 @@
 // ───── Initial Setup & Imports ─────
-require('./src/api/verify-devices');
+require('./verify-devices');
 require('dotenv').config();
 
 const express  = require('express');
@@ -8,7 +8,7 @@ const https     = require('https');
 const path     = require('path');
 const fs       = require('fs');
 // const mqtt     = require('mqtt');
-const mqttClient = require('./src/mqtt/mqtt-client.js');
+const mqttClient = require('./src/mqtt/mqtt-client');
 const { Server } = require('socket.io');
 const { getCurrentDemoTimerStates } = require('./src/utils/apiHelpers');
 const fetch    = (...args) => import('node-fetch').then(({default: f}) => f(...args));
@@ -64,7 +64,7 @@ const normalizedBase  = basePath.endsWith('/') ? basePath : basePath + '/';
 
 // ───── MQTT Bridge (for Real Devices & SmartTimers) ─────
 
-// const MQTT_URL = process.env.MQTT_URL || 'mqtt://localhost:1883';
+const MQTT_URL = process.env.MQTT_URL || 'mqtt://localhost:1883';
 // const mqttClient = mqtt.connect(MQTT_URL, {
 //   username: process.env.MQTT_USER,
 //   password: process.env.MQTT_PASS,

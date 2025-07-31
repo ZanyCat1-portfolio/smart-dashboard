@@ -1,13 +1,13 @@
 <template>
   <div class="d-flex align-items-center mb-3 gap-2 flex-wrap timer-controls">
-    <button
+    <button v-if="!isHistorical"
     :tabindex="requireAuth && !sessionState.user ? -1 : 0"
       class="btn btn-primary"
       @click="onStartOrPause"
     >
       {{ timer.state === 'running' ? 'Pause Timer' : 'Start Timer' }}
     </button>
-    <input
+    <input v-if="!isHistorical"
     :tabindex="requireAuth && !sessionState.user ? -1 : 0"
       type="number"
       min="1"
@@ -18,7 +18,7 @@
       placeholder="Min"
       @keydown.enter.prevent="onStartOrPause"
     />
-    <button
+    <button v-if="!isHistorical"
     :tabindex="requireAuth && !sessionState.user ? -1 : 0"
       class="btn btn-danger"
       @click="$emit('cancel')"
@@ -41,7 +41,8 @@ export default {
     requireAuth: {
       type: Boolean,
       default: false
-    }
+    },
+    isHistorical: { type: Boolean, default: false }
   },
   data() {
     return {

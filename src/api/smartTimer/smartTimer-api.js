@@ -58,8 +58,8 @@ function finishTimerAndNotify(timerId, isLate = false) {
   }
 }
 
-function createTimer({ label, duration }) {
-  const timer = smartTimerDAL.createSmartTimer({ label, duration });
+function createTimer({ label, description, duration }) {
+  const timer = smartTimerDAL.createSmartTimer({ label, description, duration });
   addOrUpdateTimer(timer);
   return timer;
 }
@@ -151,7 +151,7 @@ module.exports = (io) => {
   // --- Timer Endpoints ---
 
   router.post('/', (req, res) => {
-    const { label, duration } = req.body;
+    const { label, description, duration } = req.body;
     if (!label || typeof label !== 'string' || !label.trim()) {
       return res.status(400).json({ error: 'Timer label required' });
     }
@@ -159,7 +159,7 @@ module.exports = (io) => {
       return res.status(400).json({ error: 'Timer duration (seconds) required' });
     }
     try {
-      const timer = createTimer({ label, duration });
+      const timer = createTimer({ label, description, duration });
       eventBus.emit('timer:created', timer);
       res.status(201).json(timer);
     } catch (err) {

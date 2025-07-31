@@ -219,3 +219,44 @@ input.form-control:-webkit-autofill:focus {
   color: #0e0e0e !important;
   -webkit-text-fill-color: #0e0e0e !important;
 }
+
+.ghosted button, 
+.ghosted input, 
+.ghosted select,
+.ghosted textarea {
+  opacity: 0.5;
+  pointer-events: none;
+  filter: grayscale(0.7);
+  user-select: none;
+}
+
+.timer-title-active {
+  color: #e3c65d; /* Gold (from your theme) */
+}
+
+.timer-title-historical {
+  color: #e35d8b; /* Reddish-pink, tweak as needed */
+}
+
+.active-timers-container {
+  border: 2px solid #c0c0c0;
+  border-radius: 2rem;
+  padding: 2rem 1rem;
+  background: transparent;
+}
+
+.historical-timers-container {
+  border: 2px solid #808080;
+  border-radius: 2rem;
+  padding: 2rem 1rem;
+  background: transparent;
+}
+
+.no-wrap {
+  white-space: nowrap;
+}
+
+.registered-devices-list {
+  width: 30%;
+  margin: auto;
+}

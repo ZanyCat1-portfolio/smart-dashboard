@@ -40,32 +40,21 @@ export function useUsers({ socket }) {
     // console.log("what is users?", users)
     return Object.values(users).find(u => u.username === username) || null;
   }
-  // async function getUserByUsername(username) {
-  //   const res = await fetch(`${base}api/users?username=${encodeURIComponent(username)}`);
-  //   if (!res.ok) throw new Error('Failed to query by username');
-  //   const arr = await res.json();
-  //   console.log("In getUserByUsername is arr something?", arr)
-  //   if (arr.length > 0) {
-  //     users[arr[0].id] = arr[0];
-  //     return arr[0];
-  //   }
-  //   return null;
-  // }
 
-  async function createUser(username, email = null) {
-    const res = await fetch(`${base}api/users`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(email ? { username, email } : { username }),
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to create user');
-    }
-    const user = await res.json();
-    users[user.id] = user;
-    return user;
-  }
+  // async function createUser(username, email = null) {
+  //   const res = await fetch(`${base}api/users`, {
+  //     method: 'POST',
+  //     headers: { 'Content-Type': 'application/json' },
+  //     body: JSON.stringify(email ? { username, email } : { username }),
+  //   });
+  //   if (!res.ok) {
+  //     const err = await res.json();
+  //     throw new Error(err.error || 'Failed to create user');
+  //   }
+  //   const user = await res.json();
+  //   users[user.id] = user;
+  //   return user;
+  // }
 
   async function updateUser(userId, data) {
     const res = await fetch(`${base}api/users/${userId}`, {
@@ -87,12 +76,13 @@ export function useUsers({ socket }) {
 
   // --- Session helpers ---
   function login(user) {
+    console.log("is it this login?")
     currentUser.value = user;
   }
   function logout() {
+    console.log("is it this logout?")
     currentUser.value = null;
   }
-
 
   if (socket) {
       // Single user update (create, update, etc)
@@ -115,8 +105,7 @@ export function useUsers({ socket }) {
           usersArray.forEach(user => {
               users[user.id] = user;
           });
-              // console.log("users (in-mem) after snapshot:", Object.values(users));
-
+          // console.log("users (in-mem) after snapshot:", Object.values(users));
       });
   }  
 
@@ -127,7 +116,7 @@ export function useUsers({ socket }) {
     fetchUsers,
     getUserById,
     getUserByUsername,
-    createUser,
+    // createUser,
     updateUser,
     deleteUser,
     login,

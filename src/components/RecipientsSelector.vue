@@ -1,50 +1,53 @@
 <template>
-  <div>
+  <div class="recipient-selector">
     <div class="mb-2">
       <label class="fw-bold">Add Recipient:</label>
     </div>
-    <div class="d-flex mb-2 gap-2">
-      <select v-model="selectedUserId" class="form-select" style="max-width:200px;"
-        :tabindex="requireAuth && !sessionState.user ? -1 : 0"
-      >
-        <option disabled value="">Select User…</option>
-        <option v-for="user in users" :key="user.id" :value="user.id">{{ user.username }}</option>
-      </select>
-      <template v-if="selectedUser">
-        <div>
-          <span
-            v-for="device in devicesForSelectedUser"
-            :key="device.id"
-            class="form-check form-check-inline"
-          >
-            <input
-              type="checkbox"
-              class="form-check-input"
-              :id="'device-' + device.id"
-              :checked="recipientExistsForDevice(device.id)"
-              @change="onDeviceCheckboxChange(device.id, $event)"
+    <div class="d-flex flex-column gap-2" style="align-items:flex-start;">
+      <div class="select-user-wrapper">
+        <select v-model="selectedUserId"
+          class="form-select select-user"
+          style="width:100%;"
+          :tabindex="requireAuth && !sessionState.user ? -1 : 0"
+        >
+          <option disabled value="">Select User…</option>
+          <option v-for="user in users" :key="user.id" :value="user.id">{{ user.username }}</option>
+        </select>
+      </div>
+
+      <!-- Devices scrollable list, always shows at least 3 rows tall -->
+      <div class="devices-list-container">
+        <div class="devices-list">
+          <template v-if="selectedUser">
+            <div
+              v-for="device in devicesForSelectedUser"
+              :key="device.id"
+              class="form-check form-check-inline"
             >
-            <label class="form-check-label" :for="'device-' + device.id">
-              {{ device.name || device.id }}
-              <span v-if="recipientExistsForDevice(device.id)" class="text-muted" style="font-size:0.8em;">(added)</span>
-            </label>
-          </span>
+              <input
+                type="checkbox"
+                class="form-check-input"
+                :id="'device-' + device.id"
+                :checked="recipientExistsForDevice(device.id)"
+                @change="onDeviceCheckboxChange(device.id, $event)"
+                :tabindex="requireAuth && !sessionState.user ? -1 : 0"
+              >
+              <label class="form-check-label" :for="'device-' + device.id">
+                {{ device.name || device.id }}
+              </label>
+            </div>
+            <div v-if="devicesForSelectedUser.length === 0" class="no-devices">
+              No devices registered.
+            </div>
+          </template>
         </div>
-      </template>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
 import socket from '../composables/useSocket'
-// Import socket.io client the same way you do elsewhere in your app
-// import { io } from 'socket.io-client';
-// const socket = io(window.location.origin, { path: '/socket.io', transports: ['websocket', 'polling'] });
-// const socket = io('https://192.168.4.23:8080', { 
-//   path: '/socket.io', 
-//   transports: ['websocket', 'polling'], 
-//   secure: true 
-// });
 import { state as sessionState } from '../composables/useSessions'
 
 
@@ -80,13 +83,6 @@ export default {
   },
   async mounted() {
     this.loading = true;
-    // Fetch users
-    // const usersRes = await fetch('/api/users');
-    // this.users = await usersRes.json();
-    // Fetch initial recipients
-    // await this.fetchRecipients();
-
-    // Listen for real-time updates via socket.io
     socket.on('smart-timer-update', this.handleSmartTimerUpdate);
     this.loading = false;
   },
@@ -95,7 +91,6 @@ export default {
   },
   methods: {
     recipientExistsForDevice(deviceId) {
-      // Assumes each recipient in recipients has deviceId (may be string or number)
       return this.recipients.some(r =>
         String(r.deviceId) === String(deviceId) &&
         String(r.userId) === String(this.selectedUserId)
@@ -107,7 +102,12 @@ export default {
       
       // Add
       if (event.target.checked) {
-        await this.smartTimersApi.addRecipient(this.timerId, userId, deviceId);
+        try {
+          await this.smartTimersApi.addRecipient(this.timerId, userId, deviceId);
+        } catch (err) {
+          event.target.checked = false;
+          alert('Failed to add recipient: ' + (err.message || 'Unknown error'))
+        }
       }
       // Remove
       else {
@@ -117,7 +117,12 @@ export default {
           String(r.userId) === String(userId)
         );
         if (rec) {
-          await this.smartTimersApi.removeRecipient(this.timerId, rec.id)
+          try {
+            await this.smartTimersApi.removeRecipient(this.timerId, rec.id)
+          } catch (err) {
+            event.target.checked = true;
+            alert('Failed to remove recipient: ' + (err.message || 'Unknown error'))
+          }
         }
       }
     },
@@ -131,6 +136,47 @@ export default {
 </script>
 
 <style scoped>
+.recipient-selector {
+  width: 100%;
+}
+
+.select-user-wrapper {
+  /* Optionally add z-index for overlay behavior if needed */
+  position: relative;
+  width: 100%;
+  min-width: 0
+}
+
+.select-user {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.devices-list-container {
+  width: 100%;
+  /* Always at least 3 devices tall, scroll if more */
+  max-height: 5.5em; /* Approx 3 rows tall */
+  min-height: 5.5em;
+  overflow-y: auto;
+  background: transparent;
+  padding-bottom: 2px;
+}
+
+.devices-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.no-devices {
+  min-height: 36px;
+  color: #888;
+  display: flex;
+  align-items: center;
+}
+
 .form-check-inline {
   margin-right: 10px;
 }

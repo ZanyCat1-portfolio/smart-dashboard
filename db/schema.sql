@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS devices (
 CREATE TABLE IF NOT EXISTS smartTimers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     label TEXT NOT NULL,
+    description TEXT,
     duration INTEGER NOT NULL, -- duration in seconds
     initial_duration INTEGER NOT NULL,
     state TEXT NOT NULL,       -- e.g., 'pending', 'running', 'paused', 'canceled', 'finished'

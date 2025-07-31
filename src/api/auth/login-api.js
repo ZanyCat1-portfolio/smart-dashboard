@@ -19,7 +19,6 @@ module.exports = () => {
     if (!match) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    console.log("login-api user is:", user)
         req.session.user = user;
     // req.session.user = { id: user.id, username: user.username };
     res.json({ success: true, user: req.session.user });
