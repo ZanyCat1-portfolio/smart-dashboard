@@ -3,8 +3,10 @@ const express = require('express');
 // /api/govee due to proxy-server.cjs and index.js .use statements
 module.exports = (io) => {
     const router = express.Router();
+
+    const { deviceMap } = require('../../utils/apiHelpers')
     
-    router.post('/govee/:name/:action', async (req, res) => {
+    router.post('/:name/:action', async (req, res) => {
       const { name, action } = req.params;
       const deviceObj = Object.values(deviceMap).find(device =>
         device.endpoint === name && device.type === 'govee'
