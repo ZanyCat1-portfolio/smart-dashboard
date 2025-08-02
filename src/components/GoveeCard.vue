@@ -36,6 +36,7 @@ async function sendOn() {
   actionMessage.value = '';
   try {
     const url = props.getApiRoute(props.device, 'on');
+    // getApiRoute located in App.vue, already parses Tasmota and Govee with proper base
     await fetch(url, { method: 'POST' });
     actionMessage.value = 'Sent ON';
   } catch (error) {
@@ -49,6 +50,7 @@ async function sendOff() {
   actionMessage.value = '';
   try {
     const url = props.getApiRoute(props.device, 'off');
+    // getApiRoute located in App.vue, already parses Tasmota and Govee with proper base
     await fetch(url, { method: 'POST' });
     actionMessage.value = 'Sent OFF';
   } catch (error) {

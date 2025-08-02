@@ -3,7 +3,7 @@ require('./verify-devices');
 require('dotenv').config();
 
 const express  = require('express');
-// const http     = require('http');
+const http     = require('http');
 const https     = require('https');
 const path     = require('path');
 const fs       = require('fs');
@@ -15,20 +15,32 @@ const fetch    = (...args) => import('node-fetch').then(({default: f}) => f(...a
 const { publishSmartTimerState, subscribeSmartTimerTopics } = require('./src/utils/smartTimer-mqtt')
 const { logMqtt } = require('./src/utils/logger');
 
+const USE_HTTPS = process.env.USE_HTTPS === '1' || process.env.USE_HTTPS === 'true';
 
-const options = {
-  key: fs.readFileSync(path.resolve(__dirname, 'cert/dev-key.pem')),
-  cert: fs.readFileSync(path.resolve(__dirname, 'cert/dev-cert.pem'))
-}
 // ---- New: Import SmartTimer DAL for DB operations (adjust path as needed)
 const smartTimerDAL = require('./src/dal/smartTimer-dal.js');
 
 // ───── Config & Helpers ─────
 
 const app    = express();
-// const server = http.createServer(app);
-const server = https.createServer(options, app);
-const io     = new Server(server, { cors: { origin: '*' } });
+
+let server;
+if (USE_HTTPS) {
+  const options = {
+    key: fs.readFileSync(path.resolve(__dirname, 'cert/dev-key.pem')),
+    cert: fs.readFileSync(path.resolve(__dirname, 'cert/dev-cert.pem')),
+  };
+  server = https.createServer(options, app);
+  console.log("[startup] HTTPS enabled.");
+} else {
+  server = http.createServer(app);
+  console.log("[startup] HTTP enabled.");
+}
+
+const io = new Server(server, { 
+  cors: { origin: '*' }, 
+  path: process.env.BASE_PATH ? process.env.BASE_PATH.replace(/\/?$/, '') + '/socket.io' : '/socket.io'
+});
 const eventBus = require('./src/utils/eventBus.js');
 eventBus.setIo(io);
 
@@ -42,10 +54,6 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY
 );
 
-// Expose VAPID public key to the frontend
-app.get('/api/vapid-public-key', (req, res) => {
-  res.type('text/plain').send(process.env.VAPID_PUBLIC_KEY);
-});
 
 // Logging helper (show only in dev unless forced)
 function devLog(...args) {
@@ -61,6 +69,12 @@ function devLog(...args) {
 const basePath        = process.env.BASE_PATH || '/';
 const normalizedBase  = basePath.endsWith('/') ? basePath : basePath + '/';
 // console.log("what is base path?:", process.env.BASE_PATH)
+
+
+// Expose VAPID public key to the frontend
+app.get(normalizedBase + 'api/vapid-public-key', (req, res) => {
+  res.type('text/plain').send(process.env.VAPID_PUBLIC_KEY);
+});
 
 // ───── MQTT Bridge (for Real Devices & SmartTimers) ─────
 
@@ -169,6 +183,12 @@ io.on('connection', (socket) => {
   const session = require('express-session');
   const oneDay = 1000 * 60 * 60 * 24;
   const daysLoggedIn = 30
+
+  app.use((req, res, next) => {
+    console.log('[EXPRESS] Request:', req.method, req.url);
+    next();
+  });
+
   app.use(session({
     secret: 'your-secret-here',
     resave: false,
@@ -182,13 +202,25 @@ io.on('connection', (socket) => {
 
 // ───── All Routers from /src/api:  ─────
 const apiRouter = require('./src/api')(io);
+app.use((req, res, next) => {
+  console.log('[EXPRESS] Request:', req.method, req.url);
+  next();
+});
 app.use(normalizedBase + 'api', apiRouter); // gives /api to url
 
 // ───── Static File Serving & SPA Fallback ─────
 
+app.use((req, res, next) => {
+  console.log('[EXPRESS] Request:', req.method, req.url);
+  next();
+});
 // Serve static assets from /public at root (for favicon, etc)
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.use((req, res, next) => {
+  console.log('[EXPRESS] Request:', req.method, req.url);
+  next();
+});
 // Serve frontend (built SPA) from /<basePath>
 app.use(normalizedBase, express.static(path.join(__dirname, 'dist')));
 

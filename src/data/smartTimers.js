@@ -3,13 +3,12 @@ const smartTimerDAL = require('../dal/smartTimer-dal');
 const eventBus = require('../utils/eventBus');
 const fetch    = require('node-fetch');
 
-const PORT = process.env.VITE_PORT || 5173;
-const API_BASE = `https://localhost:${PORT}`;
-
-const base = `${API_BASE}${process.env.BASE_PATH || '/'}`;
+const API_BASE = process.env.API_BASE || 'http://localhost:8080'; // Use HTTP for backend default
+const BASE_PATH = process.env.BASE_PATH || '/';
+const base = `${API_BASE}${BASE_PATH}`;
 const smartTimers = reactive({});
 
-console.log("BACKEND process.env.VITE_PORT: ", process.env.VITE_PORT)
+console.log("BACKEND process.env.API_BASE: ", process.env.API_BASE)
 
 async function rehydrateSmartTimers() {
   const allTimers = smartTimerDAL.listAllSmartTimers();

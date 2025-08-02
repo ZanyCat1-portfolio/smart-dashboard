@@ -2,7 +2,6 @@ import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import fs from 'fs'
 import path from 'path'
-import { laodEnv } from 'vite'
 
 export default defineConfig(({ mode }) => {
   // Load environment variables for the current mode
@@ -14,14 +13,19 @@ export default defineConfig(({ mode }) => {
   let httpsConfig = false
 
   console.log("FRONTEND env.VITE_PORT: ", env.VITE_PORT)
-  try {
-    const key = fs.readFileSync(path.resolve(__dirname, 'cert/dev-key.pem'))
-    const cert = fs.readFileSync(path.resolve(__dirname, 'cert/dev-cert.pem'))
-    httpsConfig = { key, cert }
-  } catch {
-    // No certs found or not running dev, skip https
+  console.log("env.VITE_USE_HTTPS:", env.VITE_USE_HTTPS)
+  if (env.VITE_USE_HTTPS === '1' || env.VITE_USE_HTTPS === 'true') {
+    try {
+      const key = fs.readFileSync(path.resolve(__dirname, 'cert/dev-key.pem'))
+      const cert = fs.readFileSync(path.resolve(__dirname, 'cert/dev-cert.pem'))
+      httpsConfig = { key, cert }
+    } catch {
+      httpsConfig = false
+    }
+  } else {
     httpsConfig = false
   }
+
 
   return {
     base: basePath,
@@ -44,17 +48,18 @@ export default defineConfig(({ mode }) => {
       https: httpsConfig,
       proxy: {
         '/api': {
-          target: 'https://localhost:8080',
+          target: env.VITE_API_BASE || 'https://localhost:8080',
           changeOrigin: true,
-          secure: false, // allow self-signed cert
+          secure: false,
         },
         '/socket.io': {
-          target: 'https://localhost:8080',
+          target: env.VITE_API_BASE || 'https://localhost:8080',
           ws: true,
           changeOrigin: true,
-          secure: false, // allow self-signed cert
+          secure: false,
         }
       }
+
     }
   }
 })

@@ -2,7 +2,7 @@
 
 if ('serviceWorker' in navigator) {
   // Register the SW immediately on page load
-  navigator.serviceWorker.register('/sw.js')
+  navigator.serviceWorker.register(`${import.meta.env.VITE_BASE_PATH || '/'}sw.js`)
     .then(registration => {
       // Optionally: console.log('SW registered', registration);
     })

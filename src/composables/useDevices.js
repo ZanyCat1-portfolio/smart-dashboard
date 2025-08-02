@@ -1,10 +1,10 @@
 // src/composables/useDevices.js
 import { reactive, computed, ref } from 'vue';
 import { getPushSubscription } from '../utils/push';
-import { authFetch } from '../utils/utils';
+import { frontendAuthFetch, frontendFetch } from '../utils/utils';
 
 const devices = reactive({})
-const base = import.meta.env.BASE_URL;
+// const base = import.meta.env.BASE_URL;
 
 const currentDevice = computed(() => {
   const endpoint = localStorage.getItem('deviceEndpoint');
@@ -38,7 +38,7 @@ export function useDevices({ socket }) {
   // --- API methods ---
 
   async function fetchDevices() {
-    const res = await fetch(`${base}api/devices`);
+    const res = await frontendFetch(`/api/devices`);
     if (!res.ok) throw new Error('Failed to fetch devices');
     const arr = await res.json();
     arr.forEach(d => devices[d.id] = d);
@@ -46,7 +46,7 @@ export function useDevices({ socket }) {
   }
 
   async function fetchDevicesByUser(userId) {
-    const res = await fetch(`${base}api/devices?userId=${userId}`);
+    const res = await frontendFetch(`/api/devices?userId=${userId}`);
     if (!res.ok) throw new Error('Failed to fetch user devices');
     const arr = await res.json();
     arr.forEach(d => devices[d.id] = d);
@@ -54,7 +54,7 @@ export function useDevices({ socket }) {
   }
 
   async function getDeviceById(deviceId) {
-    const res = await fetch(`${base}api/devices/${deviceId}`);
+    const res = await frontendFetch(`/api/devices/${deviceId}`);
     if (!res.ok) throw new Error('Device not found');
     const device = await res.json();
     devices[device.id] = device;
@@ -68,7 +68,7 @@ export function useDevices({ socket }) {
       throw new Error('userId and valid pushSubscription required');
     }
     // Try reactivate-or-register (preferred)
-    const res = await authFetch(`${base}api/devices/reactivate-or-register`, {
+    const res = await frontendAuthFetch(`/api/devices/reactivate-or-register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, name, pushSubscription, platform }),
@@ -85,7 +85,7 @@ export function useDevices({ socket }) {
   }
 
   async function updateDevice(deviceId, data) {
-    const res = await authFetch(`${base}api/devices/${deviceId}`, {
+    const res = await frontendAuthFetch(`/api/devices/${deviceId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -146,7 +146,7 @@ export function useDevices({ socket }) {
 
   async function deactivateDevice(deviceId) {
     // Soft deactivation (active: false)
-    const res = await authFetch(`${base}api/devices/${deviceId}`, {
+    const res = await frontendAuthFetch(`/api/devices/${deviceId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: false }),
@@ -160,7 +160,7 @@ export function useDevices({ socket }) {
   }
 
   async function deleteDevice(deviceId) {
-    const res = await authFetch(`${base}api/devices/${deviceId}`, { method: 'DELETE' });
+    const res = await frontendAuthFetch(`/api/devices/${deviceId}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete device');
     delete devices[deviceId];
     if (currentDevice.value?.id === deviceId) currentDevice.value = null;
@@ -168,7 +168,7 @@ export function useDevices({ socket }) {
 
   // Find device by pushSubscription endpoint
   async function findDeviceByEndpoint(endpoint) {
-    const res = await fetch(`${base}api/devices/find`, {
+    const res = await frontendFetch(`/api/devices/find`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint }),

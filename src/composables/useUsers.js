@@ -1,8 +1,9 @@
 // src/composables/useUsers.js
 import { reactive, computed, ref } from 'vue';
+import { frontendFetch } from '../utils/utils';
 
 const users = reactive({})
-const base = import.meta.env.BASE_URL;
+// const base = import.meta.env.BASE_URL;
 
 // // now imported from /src/data/users
 // const users = reactive({});
@@ -20,7 +21,7 @@ const visibleUsers = computed(() =>
 export function useUsers({ socket }) {
   // --- API methods ---
   async function fetchUsers() {
-    const res = await fetch(`${base}api/users`);
+    const res = await frontendFetch(`/api/users`);
     if (!res.ok) throw new Error('Failed to fetch users');
     const usersArray = await res.json();
     usersArray.forEach(u => users[u.id] = u);
@@ -28,7 +29,7 @@ export function useUsers({ socket }) {
   }
 
   async function getUserById(userId) {
-    const res = await fetch(`${base}api/users/${userId}`);
+    const res = await frontendFetch(`/api/users/${userId}`);
     if (!res.ok) throw new Error('User not found');
     const user = await res.json();
     users[user.id] = user;
@@ -42,7 +43,7 @@ export function useUsers({ socket }) {
   }
 
   // async function createUser(username, email = null) {
-  //   const res = await fetch(`${base}api/users`, {
+  //   const res = await frontendFetch(`/api/users`, {
   //     method: 'POST',
   //     headers: { 'Content-Type': 'application/json' },
   //     body: JSON.stringify(email ? { username, email } : { username }),
@@ -57,7 +58,7 @@ export function useUsers({ socket }) {
   // }
 
   async function updateUser(userId, data) {
-    const res = await fetch(`${base}api/users/${userId}`, {
+    const res = await frontendFetch(`/api/users/${userId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -69,7 +70,7 @@ export function useUsers({ socket }) {
   }
 
   async function deleteUser(userId) {
-    const res = await fetch(`${base}api/users/${userId}`, { method: 'DELETE' });
+    const res = await frontendFetch(`/api/users/${userId}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete user');
     delete users[userId];
   }

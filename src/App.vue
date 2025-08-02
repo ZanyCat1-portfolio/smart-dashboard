@@ -46,7 +46,7 @@
         </div>
       </div>
 
-      <nav class="mb-4 sticky-nav">
+      <nav ref="navbarRef" class="mb-4 sticky-nav">
         <ul class="nav nav-tabs">
           <li class="nav-item">
             <a class="nav-link" href="#smartTimers">
@@ -68,11 +68,13 @@
 
       <div v-else>
         <!-- SMART TIMERS SECTION -->
+         <!-- Can we get navbar's height passed in? To offset the floating filter timers dropdown menu -->
          <SmartTimersSection
           :smart-timers-api="smartTimersApi"
           :users-api="usersApi"
           :devices-api="devicesApi"
           :session-state="sessionState"
+          :navbar-height="navbarHeight"
           @create="handleTimerCreate"
         />
 
@@ -123,6 +125,7 @@
 </template>
 
 <script>
+import { ref, onMounted, nextTick } from 'vue'
 import socket from './composables/useSocket'
 import TasmotaCard from './components/TasmotaCard.vue'
 import GoveeCard from './components/GoveeCard.vue'
@@ -138,12 +141,25 @@ import LoginForm from './components/LoginForm.vue'
 import RegisterForm from './components/RegisterForm.vue'
 import SmartTimersSection from './components/SmartTimersSection.vue'
 import { state as sessionState, useSession } from './composables/useSessions'
+import { frontendFetch } from './utils/utils'
+
+const navbarRef = ref(null)
+const navbarHeight = ref(0)
+onMounted(() => {
+  nextTick(() => {
+    if (navbarRef.value) {
+      navbarHeight.value = navbarRef.value.getBoundingClientRect().height
+      console.log('Measured navbarHeight:', navbarHeight.value)
+
+    }
+  })
+})
 
 const TIMEOUT_DAYS = 24
 const TIMEOUT_MINUTES = TIMEOUT_DAYS * 1440;
 const LOGIN_TIMEOUT = TIMEOUT_MINUTES * 60 * 1000;
 
-const base = import.meta.env.BASE_URL
+const base = import.meta.env.VITE_BASE_PATH || '/';
 
 export default {
   name: 'App',
@@ -185,7 +201,8 @@ export default {
       loginTimer: null,
       userSuggestions: JSON.parse(localStorage.getItem('usernames') || '[]'),
       showRegister: false,
-      sessionState
+      sessionState,
+      navbarHeight: 0,
     }
   },
   computed: {
@@ -238,6 +255,13 @@ export default {
     this.getSmartTimerDisplay = smartTimersApi.getSmartTimerDisplay;
 
     window.smartTimerStates = smartTimersApi.smartTimerStates;
+
+    this.$nextTick(() => {
+      if (this.$refs.navbarRef) {
+        this.navbarHeight = this.$refs.navbarRef.getBoundingClientRect().height;
+        console.log('Measured navbarHeight:', this.navbarHeight);
+      }
+    });
 
     // 2. All other awaits and DOM logic after handlers
     await this.loadDevices();
@@ -339,11 +363,11 @@ export default {
       this.loginTimer = null;
     },
     async handleTimerCreate(timerData) {
-      console.log("DO I HAPPEN?")
+      // console.log("DO I HAPPEN?")
       // SHOULD THIS HAPPEN IN SMARTTIMER COMPONENT?
       // Example: Send the timer data to your backend to create a new timer
       try {
-        const response = await fetch('/api/smart-timers', {
+        const response = await frontendFetch('/api/smart-timers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(timerData),
@@ -368,7 +392,7 @@ export default {
           throw new Error('No registered device ID found');
         }
 
-        const res = await fetch(`/api/devices/${this.registeredDeviceInfo.deviceId}`, {
+        const res = await frontendFetch(`/api/devices/${this.registeredDeviceInfo.deviceId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ active: false }),
@@ -396,7 +420,7 @@ export default {
       await this.cancelTimer(device)
     },
     async loadDevices() {
-      const res = await fetch(`${base}api/tasmota/devices`, { cache: 'no-store' })
+      const res = await frontendFetch(`/api/tasmota/devices`, { cache: 'no-store' })
       const map = await res.json()
       if (map._meta?.example) {
         this.isExampleFile = true;

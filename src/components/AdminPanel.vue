@@ -67,6 +67,7 @@
 </template>
 
 <script>
+import { frontendFetch } from '../utils/utils';
 export default {
   props: {
     exit: Function,
@@ -86,26 +87,26 @@ export default {
   },
   methods: {
     async fetchUsers() {
-      const res = await fetch('/api/users');
+      const res = await frontendFetch('/api/users');
       this.users = await res.json();
     },
     async fetchDevices() {
-      const res = await fetch('/api/devices')
+      const res = await frontendFetch('/api/devices')
       this.devices = await res.json();
     },
     async deleteUser(userId) {
       if (!confirm('Delete this user and all its devices?')) return;
-      await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+      await frontendFetch(`/api/users/${userId}`, { method: 'DELETE' });
       await this.fetchUsers();
       await this.fetchDevices();
     },
     async deleteDevice(deviceId) {
-      await fetch(`/api/devices/${deviceId}`, { method: 'DELETE' });
+      await frontendFetch(`/api/devices/${deviceId}`, { method: 'DELETE' });
       await this.fetchDevices();
     },
     // Remove timer from local array if not in DB
     async deleteTimer(timerId) {
-      await fetch(`/api/smart-timers/${timerId}/cancel`, { method: 'POST' });
+      await frontendFetch(`/api/smart-timers/${timerId}/cancel`, { method: 'POST' });
       this.reloadTimers();
     }
   },

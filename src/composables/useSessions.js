@@ -1,4 +1,5 @@
 import { reactive, readonly } from 'vue'
+import { frontendFetch } from '../utils/utils'
 
 export const state = reactive({
     user: null
@@ -7,7 +8,7 @@ export const state = reactive({
 export function useSession() {
     async function fetchSession() {
         // console.log("are we fetch session yet?")
-        const res = await fetch('/api/auth/session')
+        const res = await frontendFetch('/api/auth/session')
         // console.log("what is useSession res:", res)
         if (res.ok) {
             const json = await res.json()
@@ -20,7 +21,7 @@ export function useSession() {
     // this gets called by logging in via UI
     async function login(username, password) {
         // console.log("IS THIS LOGIN GETTING CALLED")
-        const res = await fetch('/api/auth/login', {
+        const res = await frontendFetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
@@ -39,7 +40,7 @@ export function useSession() {
     // this gets called by logging out via UI
     async function logout() {
         // console.log("IS THIS LOGOUT GETTING CALLED")
-        await fetch('/api/auth/logout', { method: 'POST' })
+        await frontendFetch('/api/auth/logout', { method: 'POST' })
         localStorage.setItem('user', '');
         console.log("localStorage: ", localStorage)
         state.user = null
@@ -47,7 +48,7 @@ export function useSession() {
 
     async function register(username, password) {
         // console.log("username/password:", username, password)
-        const res = await fetch('/api/users', {
+        const res = await frontendFetch('/api/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })

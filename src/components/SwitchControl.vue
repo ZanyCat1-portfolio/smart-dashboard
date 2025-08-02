@@ -8,6 +8,7 @@
 </template>
 
 <script>
+import { frontendFetch } from '../utils/utils';
 export default {
   props: {
     label: { type: String, required: true },
@@ -20,7 +21,7 @@ export default {
     async toggle() {
       this.loading = true;
       try {
-        await fetch(`/api/${this.endpoint}/toggle`, { method: 'GET' });
+        await frontendFetch(`/api/${this.endpoint}/toggle`, { method: 'GET' });
       } catch (error) {
         alert('Failed to toggle switch: ' + error.message);
       } finally {

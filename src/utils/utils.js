@@ -14,15 +14,17 @@ export function refreshLoginTimer(callback, timeoutMs) {
   return setTimeout(callback, timeoutMs);
 }
 
-export async function authFetch(url, options) {
+export async function frontendAuthFetch(endpoint, options) {
+  const base = import.meta.env.VITE_BASE_PATH || '/';
+  console.log("what is base authFetch: ", base)
+  const url = base.replace(/\/+$/, '') + '/' + endpoint.replace(/^\/+/, '');
   const res = await fetch(url, options);
 
   if (res.status === 401 || res.status === 403) {
     state.user = null;
-    // Optional: force navigation to login or reload
+    // Optionally redirect or reload
   }
   if (!res.ok) {
-    // Throw with status and message (if available)
     let errMsg;
     try {
       const body = await res.json();
@@ -36,4 +38,12 @@ export async function authFetch(url, options) {
   }
 
   return res;
+}
+
+export async function frontendFetch(endpoint, options = {}) {
+  const base = import.meta.env.VITE_BASE_PATH || '/';
+  console.log("what is base frotFetch: ", base)
+  // Remove double slashes
+  const url = base.replace(/\/+$/, '') + '/' + endpoint.replace(/^\/+/, '');
+  return fetch(url, options)
 }

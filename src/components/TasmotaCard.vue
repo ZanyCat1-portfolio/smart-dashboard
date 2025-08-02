@@ -75,7 +75,6 @@
 import AnimatedSwitch from './AnimatedSwitch.vue'
 import BaseDeviceCard from './BaseDeviceCard.vue' // REQUIRED for composition-based templates
 
-
 export default {
 
   name: 'TasmotaCard',
@@ -119,6 +118,7 @@ export default {
       this.localSwitchOn = newSwitchState
       const action = newSwitchState ? 'on' : 'off'
       const url = this.getApiRoute(this.device, action)
+      // getApiRoute located in App.vue, already parses Tasmota and Govee with proper base
       await fetch(url, { method: 'POST' })
     },
     
@@ -138,6 +138,7 @@ export default {
     },
     async checkTimerStatus() {
       const url = this.getApiRoute(this.device, 'timer/status');
+      // getApiRoute located in App.vue, already parses Tasmota and Govee with proper base
       const response = await fetch(url);
       const statusJson = await response.json();
     },

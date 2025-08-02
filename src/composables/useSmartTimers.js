@@ -1,10 +1,10 @@
 // useSmartTimers.js
 import { reactive, computed, ref } from 'vue'
-import { authFetch } from '../utils/utils';
+import { frontendFetch, frontendAuthFetch } from '../utils/utils';
 
 
 const smartTimers = reactive({})
-const base = import.meta.env.BASE_URL;
+// const base = import.meta.env.BASE_URL;
 // console.log("base is:", base)
 
 // Shared reference for time
@@ -24,7 +24,7 @@ function mmss(sec) {
 export function useSmartTimers({ socket }) {
 
     async function startTimer(timerId, duration) {
-        await authFetch(`${base}api/smart-timers/${timerId}/start`, {
+        await frontendAuthFetch(`/api/smart-timers/${timerId}/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ duration })
@@ -32,20 +32,20 @@ export function useSmartTimers({ socket }) {
     }
 
     async function pauseTimer(timerId) {
-        await authFetch(`${base}api/smart-timers/${timerId}/pause`, { method: 'POST' });
+        await frontendAuthFetch(`/api/smart-timers/${timerId}/pause`, { method: 'POST' });
     }
 
     async function unpauseTimer(timerId) {
         // console.log("DID ALSO GET HERE?")
-        await authFetch(`${base}api/smart-timers/${timerId}/unpause`, { method: 'POST' });
+        await frontendAuthFetch(`/api/smart-timers/${timerId}/unpause`, { method: 'POST' });
     }
     
     async function cancelTimer(timerId) {
-        await fetch(`${base}api/smart-timers/${timerId}/cancel`, { method: 'POST' });
+        await frontendFetch(`api/smart-timers/${timerId}/cancel`, { method: 'POST' });
     }
     
     async function addRecipient(timerId, userId, deviceId, type = 'webpush', target = deviceId) {
-        await authFetch(`/api/smart-timers/${timerId}/recipients`, {
+        await frontendAuthFetch(`/api/smart-timers/${timerId}/recipients`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId, deviceId, type, target })
@@ -53,7 +53,7 @@ export function useSmartTimers({ socket }) {
     }
 
     async function removeRecipient(timerId, recipientId) {
-        await authFetch(`/api/smart-timers/${timerId}/recipients/${recipientId}`, {
+        await frontendAuthFetch(`/api/smart-timers/${timerId}/recipients/${recipientId}`, {
             method: 'DELETE'
         });
     }

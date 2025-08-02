@@ -3,10 +3,10 @@ const { logError, logInfo } = require('../utils/logger');
 const deviceDAL = require('../dal/device-dal');
 const fetch = require('node-fetch');
 
-const PORT = process.env.VITE_PORT || 5173;
-const API_BASE = process.env.API_BASE || `https://localhost:${PORT}`;
+const API_BASE = process.env.API_BASE || 'http://localhost:8080';
+const BASE_PATH = process.env.BASE_PATH || '/';
+const base = `${API_BASE}${BASE_PATH}`;
 
-const base = `${API_BASE}${process.env.BASE_PATH || '/'}`;
 
 async function sendPushToRecipients(recipients, payload) {
   if (!Array.isArray(recipients) || recipients.length === 0) return;

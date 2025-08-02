@@ -5,9 +5,9 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
-    "dev:backend": "cross-env NODE_ENV=development NODE_TLS_REJECT_UNAUTHORIZED=0 node --trace-warnings proxy-server.cjs",
+    "dev:backend": "cross-env USE_HTTPS=1 NODE_ENV=development NODE_TLS_REJECT_UNAUTHORIZED=0 node --trace-warnings proxy-server.cjs",
     "dev:mosq": "docker rm -f mosquitto-dev 2>/dev/null || true && docker run -d --name mosquitto-dev -p 1883:1883 -v \"${PWD}/mosquitto.conf\":/mosquitto/config/mosquitto.conf:ro eclipse-mosquitto:2",
-    "dev:full": "cross-env concurrently -k -n VITE,BACKEND -c cyan,green \"npm run dev\" \"npm run dev:backend\"",
+    "dev:full": "cross-env VITE_USE_HTTPS=1  concurrently -k -n VITE,BACKEND -c cyan,green \"npm run dev\" \"npm run dev:backend\"",
     "_note": "Use `npm run build` to generate dist/ before running proxy-server.cjs in production"
   },
   "dependencies": {

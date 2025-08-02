@@ -1,3 +1,7 @@
+// a frontend utility file!
+// TODO maybe refactor this into ./utils file
+import { frontendFetch } from "./utils";
+
 export async function getPushSubscription() {
     if (!('serviceWorker' in navigator)) throw new Error('Service Worker not supported');
     if (!('PushManager' in window)) throw new Error('Push not supported in this browser');
@@ -10,7 +14,7 @@ export async function getPushSubscription() {
     if (permission !== 'granted') throw new Error('Notification permission denied');
 
     // Get your VAPID public key from the backend
-    const resp = await fetch('/api/vapid-public-key');
+    const resp = await frontendFetch('/api/vapid-public-key');
     if (!resp.ok) throw new Error('Failed to get VAPID key');
     const publicVapidKey = await resp.text();
 
