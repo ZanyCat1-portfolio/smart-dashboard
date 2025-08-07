@@ -176,7 +176,7 @@ io.on('connection', (socket) => {
 
     // Users:
     const { users } = require('./src/data/users');
-    socket.emit('users:snapshot', Object.values(users));
+    socket.emit('users:snapshot', Object.values(users).map(({ passwordHash, ...u}) => u));
     // console.log('[SOCKET.IO] Sent users:snapshot:', users);
   });
 
@@ -185,7 +185,7 @@ io.on('connection', (socket) => {
   const daysLoggedIn = 30
 
   app.use((req, res, next) => {
-    console.log('[EXPRESS] Request:', req.method, req.url);
+    // console.log('[EXPRESS] Request:', req.method, req.url);
     next();
   });
 
@@ -203,7 +203,7 @@ io.on('connection', (socket) => {
 // ───── All Routers from /src/api:  ─────
 const apiRouter = require('./src/api')(io);
 app.use((req, res, next) => {
-  console.log('[EXPRESS] Request:', req.method, req.url);
+  // console.log('[EXPRESS] Request:', req.method, req.url);
   next();
 });
 app.use(normalizedBase + 'api', apiRouter); // gives /api to url

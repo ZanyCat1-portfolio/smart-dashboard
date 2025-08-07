@@ -13,23 +13,28 @@ const userDAL = {
   },
 
   getUserById: (id) => {
-    const row = db.get(`SELECT * FROM users WHERE id = ?`, [id]);
+    const row = db.get(`SELECT id, username, email, created_at AS createdAt, active FROM users WHERE id = ?`, [id]);
     return row ? new User(row) : null;
   },
 
   getUserByUsername: (username) => {
-    const row = db.get('SELECT * FROM users WHERE username = ?', [username]);
+    const row = db.get('SELECT id, username, email, created_at AS createdAt, active FROM users WHERE username = ?', [username]);
     return row ? new User(row) : null;
   },
 
   getUserByEmail: (email) => {
-    const row = db.get('SELECT * FROM users WHERE email = ?', [email]);
+    const row = db.get('SELECT id, username, email, created_at AS createdAt, active FROM users WHERE email = ?', [email]);
+    return row ? new User(row) : null;
+  },
+
+  getUserAuthByUsername(username) {
+    const row = db.get('SELECT * FROM users WHERE username = ? AND active = 1', [username])
     return row ? new User(row) : null;
   },
 
   findUsersByName: (username) => {
     const rows = db.all(`
-      SELECT * FROM users
+      SELECT id, username, email, created_at AS createdAt, active FROM users
       WHERE username LIKE '%' || ? || '%'
       ORDER BY username ASC
     `, [username]);
@@ -38,13 +43,13 @@ const userDAL = {
 
   findUsersByExactUsername: (username) => {
     const rows = db.all(`
-      SELECT * FROM users WHERE LOWER(username) = LOWER(?)
+      SELECT id, username, email, created_at AS createdAt, active FROM users WHERE LOWER(username) = LOWER(?)
     `, [username]);
     return rows.map(row => new User(row));
   },
 
   listUsers: (filter = {}) => {
-    let sql = 'SELECT * FROM users';
+    let sql = 'SELECT id, username, email, created_at AS createdAt, active FROM users';
     const params = [];
 
     if (typeof filter.active === 'boolean') {

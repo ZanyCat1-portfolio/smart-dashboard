@@ -6,15 +6,15 @@ const recipientDAL = require('./recipient-dal')
 const smartTimerDAL = {
 
   createSmartTimer: (data) => {
-    const { label, description, duration, state = 'pending', startTime, endTime } = data;
+    const { userId, label, description, duration, state = 'pending', startTime, endTime } = data;
     const now = new Date().toISOString();
     const safeStartTime = startTime || null;
     const safeEndTime = endTime || null;
 
     const res = db.run(
-      `INSERT INTO smartTimers (label, description, duration, initial_duration, state, start_time, end_time, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [label, description, duration, duration, state, safeStartTime, safeEndTime, now, now]
+      `INSERT INTO smartTimers (user_id, label, description, duration, initial_duration, state, start_time, end_time, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, label, description, duration, duration, state, safeStartTime, safeEndTime, now, now]
     );
 
     // Return a timer object with ALL expected properties, using camelCase for frontend
@@ -48,6 +48,7 @@ const smartTimerDAL = {
     const rows = db.all(`SELECT * FROM smartTimers`);
     return rows.map(row => {
       const timer = new SmartTimer(row);
+      console.log("row was: ", row, "timer is: ", timer)
       timer.recipients = recipientDAL.getRecipientsForTimer(timer.id);
       return timer;
     });

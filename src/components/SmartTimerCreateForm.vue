@@ -66,9 +66,11 @@ export default {
   },
   methods: {
     async submit() {
+      console.log("sessionState.user:", sessionState.user)
       if (!this.label || !this.minutes) return;
       const duration = this.minutes * 60; // Convert to seconds for backend
-      this.$emit('create', { label: this.label, duration, description: this.description });
+      this.$emit('create', { userId: sessionState.user.id, label: this.label, duration, description: this.description });
+      this.userId = 0;
       this.label = '';
       this.description = '';
       this.minutes = null;

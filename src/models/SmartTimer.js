@@ -4,6 +4,7 @@ class SmartTimer extends EventEmitter {
   constructor(row) {
     super();
     this.id = row.id;
+    this.userId = row.userId !== undefined ? row.userId : row.user_id;
     this.label = row.label;
     this.description = row.description;
     this.duration = row.duration;

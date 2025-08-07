@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
-    passwordHash TEXT,
+    password_hash TEXT,
     email TEXT UNIQUE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     active BOOLEAN DEFAULT 1
@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS devices (
 -- SmartTimers table
 CREATE TABLE IF NOT EXISTS smartTimers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
     label TEXT NOT NULL,
     description TEXT,
     duration INTEGER NOT NULL, -- duration in seconds

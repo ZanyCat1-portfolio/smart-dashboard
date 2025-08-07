@@ -6,8 +6,9 @@ export const state = reactive({
 })
 
 export function useSession() {
+    // console.log("is state set already?: ", state)
     async function fetchSession() {
-        // console.log("are we fetch session yet?")
+        // console.log("does happen on app restart?")
         const res = await frontendFetch('/api/auth/session')
         // console.log("what is useSession res:", res)
         if (res.ok) {
@@ -20,7 +21,7 @@ export function useSession() {
 
     // this gets called by logging in via UI
     async function login(username, password) {
-        // console.log("IS THIS LOGIN GETTING CALLED")
+        console.log("login has password right:", password)
         const res = await frontendFetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -28,6 +29,7 @@ export function useSession() {
         })
         if (res.ok) {
             const json = await res.json()
+            console.log("whole json:", json)
             return json.user
             // state.user = json.user
             // localStorage.setItem('user', JSON.stringify(state.user));

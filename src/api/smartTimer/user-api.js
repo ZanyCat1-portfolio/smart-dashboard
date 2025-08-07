@@ -52,17 +52,17 @@ module.exports = (io) => {
   // List all users (?active=true|false, ?username)
   router.get('/', (req, res) => {
     try {
-      let result = Object.values(users);
+      let safeResult = Object.values(users).map(({ passwordHash, ...u}) => u);
       if (req.query.active !== undefined) {
         const wantActive = String(req.query.active) === 'true';
-        result = result.filter(u => !!u.active === wantActive);
+        safeResult = safeResult.filter(u => !!u.active === wantActive);
       }
       if (req.query.username) {
         // Partial match (case-insensitive)
         const filter = req.query.username.toLowerCase();
-        result = result.filter(u => (u.username || '').toLowerCase().includes(filter));
+        safeResult = safeResult.filter(u => (u.username || '').toLowerCase().includes(filter));
       }
-      res.json(result);
+      res.json(safeResult);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

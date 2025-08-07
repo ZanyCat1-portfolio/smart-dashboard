@@ -108,7 +108,6 @@
                   :state="deviceStates[device.endpoint]"
                   :theme="theme"
                   :get-api-route="getApiRoute"
-                  :timer-state="timerStates[device.endpoint]"
                   :timer-display="timerDisplays[device.endpoint]"
                   :on-start-timer="(minutes) => startTimer(device, minutes)"
                   :on-add-to-timer="(minutes) => addToTimer(device, minutes)"
@@ -145,15 +144,7 @@ import { frontendFetch } from './utils/utils'
 
 const navbarRef = ref(null)
 const navbarHeight = ref(0)
-onMounted(() => {
-  nextTick(() => {
-    if (navbarRef.value) {
-      navbarHeight.value = navbarRef.value.getBoundingClientRect().height
-      console.log('Measured navbarHeight:', navbarHeight.value)
 
-    }
-  })
-})
 
 const TIMEOUT_DAYS = 24
 const TIMEOUT_MINUTES = TIMEOUT_DAYS * 1440;
@@ -275,22 +266,23 @@ export default {
     await Promise.all(
       this.devices.map(async device => {
         await this.fetchStatus(device);
+        await this.fetchTimerStatus(device);
       })
     );
 
     this.loadingDevices = false;
 
-    const storedUserString = localStorage.getItem('user');
-    sessionState.user = null;
-    if (storedUserString) {
-      const storedUserJSON = JSON.parse(storedUserString)
-      for (let user in usersApi.users) {
-        if (usersApi.users[user].username === storedUserJSON.username) {
-          console.log(`found ${storedUserJSON.username}!`)
-          sessionState.user = storedUserJSON; // <--- set your global state!
-        }
-      }
+    // window.__vue_root__.$data.sessionState.user
+    const res = await frontendFetch("/api/auth/session")
+    if (res.ok) {
+      const data = await res.json();
+      sessionState.user = data.user;
+      localStorage.setItem('user', JSON.stringify(data.user));
+    } else {
+      sessionState.user = null;
+      localStorage.removeItem('user')
     }
+
   },
   beforeUnmount() {
     if (this.dashboardTimerPoll) clearInterval(this.dashboardTimerPoll);
@@ -363,6 +355,7 @@ export default {
       this.loginTimer = null;
     },
     async handleTimerCreate(timerData) {
+      console.log("what is timerdata now:", timerData)
       // console.log("DO I HAPPEN?")
       // SHOULD THIS HAPPEN IN SMARTTIMER COMPONENT?
       // Example: Send the timer data to your backend to create a new timer
@@ -481,11 +474,37 @@ export default {
       const url = this.getApiRoute(device, 'status');
       try {
         const res = await fetch(url);
-        const statusJson = await res.json();
-        this.deviceStates[device.endpoint] =
-          statusJson?.Status?.Power === true || statusJson?.Status?.Power === 'on' ? 'on' : 'off';
+        const jsn = await res.json();
+
+        const raw =
+          jsn?.Status?.Power ??           // 1 / 0 / true / false / 'on' / 'off'
+          jsn?.StatusSTS?.POWER;          // 'ON' / 'OFF'
+
+        const isOn =
+          raw === 1 || raw === '1' || raw === true ||
+          (typeof raw === 'string' && raw.toLowerCase() === 'on');
+
+        this.deviceStates[device.endpoint] = isOn ? 'on' : 'off';
       } catch {
         this.deviceStates[device.endpoint] = 'off';
+      }
+    },
+    async fetchTimerStatus(device) {
+      const url = this.getApiRoute(device, 'timer/status');
+      try {
+        const res = await fetch(url);
+        const statusJson = await res.json();
+        this.timerStates[device.endpoint] = {
+          running: !!statusJson.running,
+          endTime: statusJson.endTime 
+            || (statusJson.running ? Date.now() + (statusJson.remainingMs || 0) : null),
+          power: statusJson.power || null
+        };
+      } catch {
+        // If we can't reach the device or get timer data, don't overwrite existing timer state
+        if (!this.timerStates[device.endpoint]) {
+          this.timerStates[device.endpoint] = { running: false, endTime: null, power: null };
+        }
       }
     },
     getCardComponent(device) {

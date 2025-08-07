@@ -2,7 +2,7 @@
 // TODO does fetchAndSync need frontendFetch treatment?
 import { reactive, computed, ref } from 'vue'
 
-// const base = import.meta.env.BASE_URL;
+const base = import.meta.env.BASE_URL;
 
 // Shared reference for time
 const now = ref(Date.now())
@@ -42,7 +42,7 @@ export function useTasmotaTimers({ socket, getApiRoute }) {
         const url = getApiRoute(device, 'timer')
         const body = { minutes }
         try {
-        await frontendAuthFetch(url, {
+        await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -58,7 +58,7 @@ export function useTasmotaTimers({ socket, getApiRoute }) {
         const url = getApiRoute(device, 'timer')
         const body = { minutes }
         try {
-        await frontendAuthFetch(url, {
+        await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -73,7 +73,7 @@ export function useTasmotaTimers({ socket, getApiRoute }) {
         const endpoint = device.endpoint
         const url = getApiRoute(device, 'timer')
         try {
-        await frontendAuthFetch(url, {
+        await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ minutes: 0 })

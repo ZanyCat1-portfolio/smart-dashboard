@@ -58,8 +58,8 @@ function finishTimerAndNotify(timerId, isLate = false) {
   }
 }
 
-function createTimer({ label, description, duration }) {
-  const timer = smartTimerDAL.createSmartTimer({ label, description, duration });
+function createTimer({ userId, label, description, duration }) {
+  const timer = smartTimerDAL.createSmartTimer({ userId, label, description, duration });
   addOrUpdateTimer(timer);
   return timer;
 }
@@ -152,6 +152,7 @@ module.exports = (io) => {
 
   router.post('/', (req, res) => {
     const { label, description, duration } = req.body;
+    const userId = req.session.user.id;
     if (!label || typeof label !== 'string' || !label.trim()) {
       return res.status(400).json({ error: 'Timer label required' });
     }
@@ -159,7 +160,7 @@ module.exports = (io) => {
       return res.status(400).json({ error: 'Timer duration (seconds) required' });
     }
     try {
-      const timer = createTimer({ label, description, duration });
+      const timer = createTimer({ userId, label, description, duration});
       eventBus.emit('timer:created', timer);
       res.status(201).json(timer);
     } catch (err) {

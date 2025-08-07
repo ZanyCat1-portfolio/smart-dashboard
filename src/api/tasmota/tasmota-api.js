@@ -69,6 +69,31 @@ module.exports = (io) => {
       }
     });
     
+    // Device status for real device
+    router.get('/:device/status', async (req, res) => {
+      const { device } = req.params;
+      const deviceObj = getDevice(device);
+      if (!deviceObj) return res.status(404).json({ error: 'Unknown device' });
+      
+      try {
+        const resp = await fetch(`http://${deviceObj.ip}/cm?cmnd=STATUS%200`);
+        const data = await resp.json();
+        const timer = tasmotaTimers[device];
+        if (timer && timer.endTime > Date.now()) {
+          data.timer = {
+            running: true,
+            endTime: timer.endTime,
+            remainingMs: Math.max(0, timer.endTime - Date.now())
+          };
+        } else {
+          data.timer = { running: false };
+        }
+        res.json(data);
+      } catch (err) {
+        console.error('[Status]', err.message);
+        res.status(500).json({ error: 'Failed to get status' });
+      }
+    });
     
     // Timer status for real device
     router.get('/:device/timer/status', (req, res) => {

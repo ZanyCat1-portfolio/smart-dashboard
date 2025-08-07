@@ -16,6 +16,7 @@
 
 
         <span
+          v-if="timerState"
           class="badge"
           :class="{
             'bg-secondary': timerState === 'finished',
@@ -24,6 +25,7 @@
           style="font-size: 0.85em;"
         >
           {{ timerState.charAt(0).toUpperCase() + timerState.slice(1) }}
+            <!-- {{  timerState }} -->
         </span>
 
         
