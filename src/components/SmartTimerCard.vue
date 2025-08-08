@@ -5,7 +5,7 @@
   :label="timer.label || 'Timer'"
   :verified="true"
   :is-historical="isHistorical"
-  :timer-state="timer.state"
+  :smart-timer-state="timer.state"
   deviceType="timer"
   icon="bi-alarm"
   >

@@ -108,6 +108,7 @@
                   :state="deviceStates[device.endpoint]"
                   :theme="theme"
                   :get-api-route="getApiRoute"
+                  :timer-state="timerStates[device.endpoint]"
                   :timer-display="timerDisplays[device.endpoint]"
                   :on-start-timer="(minutes) => startTimer(device, minutes)"
                   :on-add-to-timer="(minutes) => addToTimer(device, minutes)"

@@ -16,16 +16,16 @@
 
 
         <span
-          v-if="timerState"
+          v-if="smartTimerState"
           class="badge"
           :class="{
-            'bg-secondary': timerState === 'finished',
-            'bg-danger': timerState === 'canceled'
+            'bg-secondary': smartTimerState === 'finished',
+            'bg-danger': smartTimerState === 'canceled'
           }"
           style="font-size: 0.85em;"
         >
-          {{ timerState.charAt(0).toUpperCase() + timerState.slice(1) }}
-            <!-- {{  timerState }} -->
+          {{ smartTimerState.charAt(0).toUpperCase() + smartTimerState.slice(1) }}
+            <!-- {{  smartTimerState }} -->
         </span>
 
         
@@ -53,7 +53,7 @@ export default {
     deviceType: { type: String, default: "" },
     icon: { type: String, default: "" },
     isHistorical: { type: Boolean, default: false },
-    timerState: { type: String, default: '' }
+    smartTimerState: { type: String, default: '' }
   }
 }
 </script>
