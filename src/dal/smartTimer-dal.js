@@ -48,7 +48,7 @@ const smartTimerDAL = {
     const rows = db.all(`SELECT * FROM smartTimers`);
     return rows.map(row => {
       const timer = new SmartTimer(row);
-      console.log("row was: ", row, "timer is: ", timer)
+//      console.log("row was: ", row, "timer is: ", timer)
       timer.recipients = recipientDAL.getRecipientsForTimer(timer.id);
       return timer;
     });

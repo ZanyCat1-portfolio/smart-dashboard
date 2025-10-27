@@ -1,5 +1,10 @@
 <template>
-  <div id="smartTimers" class="card mb-4" style="scroll-margin-top: 4rem;" ref="smartTimersContainer">
+  <div 
+    id="smartTimers" 
+    class="card mb-4" 
+    style="scroll-margin-top: 4rem;" 
+    ref="smartTimersContainer"
+  >
     <div>
       <button
         class="card-header d-flex justify-content-between align-items-center w-100 text-start"
@@ -14,8 +19,10 @@
       </button>
       
       <SmartTimerCreateForm
+        ref="createForm"
         v-if="showCreateForm"
         @create="handleTimerCreate"
+        @cancel="handleTimerCancel"
         :require-auth="!sessionState.user"
         :tabindex="!sessionState.user ? 0 : -1"
         :class="{ ghosted: !sessionState.user }"
@@ -31,20 +38,21 @@
 
       <!-- FILTER DROPDOWN -->
       <div class="dropdown my-2" style="position: relative;" ref="dropdownContainer">
-      <button
-        class="btn btn-outline-secondary dropdown-toggle"
-        type="button"
-        @click.stop="openFilterDropdown  "
-      >
-        Filter Timers
-      </button>
-      <div
-        v-show="showFilterDropdown"
-        class="dropdown-menu show p-3 "
-        ref="dropdownMenu"
-        :style="dropdownStyle"
-        @click.stop
-      >
+        <button
+          class="btn btn-outline-secondary dropdown-toggle"
+          type="button"
+          @click.stop="openFilterDropdown  "
+        >
+          Filter Timers
+        </button>
+        
+        <div
+          v-show="showFilterDropdown"
+          class="dropdown-menu show p-3 "
+          ref="dropdownMenu"
+          :style="dropdownStyle"
+          @click.stop
+        >
           <div class="form-check">
             <input
               class="form-check-input"
@@ -77,10 +85,30 @@
             <label class="form-label mb-0" style="width: 50%;">Max duration:</label>
             <input type="number" min="0" v-model.number="filters.maxDuration" class="form-control" placeholder="max (min)" style="width: 50%;" />
           </div>
+          
+          <div class="mb-2 d-flex align-items-center gap-2">
+            <label class="form-label mb-0" style="width: 50%;">Start date:</label>
+            <input
+              type="date"
+              v-model="filters.startDate"
+              class="form-control"
+              style="width: 50%;"
+            />
+          </div>
+
+          <div class="mb-2 d-flex align-items-center gap-2">
+            <label class="form-label mb-0" style="width: 50%;">End date:</label>
+            <input
+              type="date"
+              v-model="filters.endDate"
+              class="form-control"
+              style="width: 50%;"
+            />
+          </div>
         </div>
       </div>
 
-      <div v-show="isExpanded" class="card-body">
+      <div v-show="isExpanded" class="card-body" :style="smartTimersExtraSpace">
         <!-- Active Timers Group -->
         <div v-if="activeTimers.length">
           <h3 class="mb-4">Active Timers</h3>
@@ -156,30 +184,25 @@ export default {
     const STICKY_TOP = 0
     const containerTop = ref(0)
     const containerBottom = ref(0)
-    const scrollY = ref(0)
-
     const dropdownMenuHeight = ref(0)
 
-      watch(
-        () => props.navbarHeight,
-        (newVal, oldVal) => {
-          // This runs every time navbarHeight changes
-          console.log('navbarHeight changed from', oldVal, 'to', newVal)
-          // You can react to the change here (recalculate positions, etc.)
-        },
-        { immediate: true } // Run right away with the initial value
-      )
+    watch(
+      () => props.navbarHeight,
+      (newVal, oldVal) => {
+        // This runs every time navbarHeight changes
+        console.log('navbarHeight changed from', oldVal, 'to', newVal)
+        // You can react to the change here (recalculate positions, etc.)
+      },
+      { immediate: true } // Run right away with the initial value
+    )
     
-
     function openFilterDropdown() {
       showFilterDropdown.value = true
       nextTick(() => {
         // This runs after DOM update, so ref is ready
         if (dropdownMenu.value) {
           const rect = dropdownMenu.value.getBoundingClientRect()
-          console.log("Dropdown menu height:", rect.height)
-        } else {
-          console.log("dropdownMenu ref is not set")
+          dropdownMenuHeight.value = rect.height
         }
       })
     }
@@ -192,87 +215,86 @@ export default {
       }
     }
 
-  function updateDropdownPosition() {
-    nextTick(() => {
-      if (dropdownContainer.value) {
-        const rect = dropdownContainer.value.getBoundingClientRect();
-        // dropdownTop.value = rect.top + window.scrollY
-        // dropdownLeft.value = rect.left + window.scrollX
-        dropdownTop.value = rect.top
-        dropdownLeft.value = rect.left
+    function updateDropdownPosition() {
+      nextTick(() => {
+        if (dropdownContainer.value) {
+          const rect = dropdownContainer.value.getBoundingClientRect();
+          // dropdownTop.value = rect.top + window.scrollY
+          // dropdownLeft.value = rect.left + window.scrollX
+          dropdownTop.value = rect.top
+          dropdownLeft.value = rect.left
+        }
+
+      })
+    }
+    // Listen to scroll, recalc stickiness & top
+    function onScroll() {
+      console.log("navbarHeight:", props.navbarHeight)
+      // Always update these:
+      if (smartTimersContainer.value) {
+        const rect = smartTimersContainer.value.getBoundingClientRect();
+        containerTop.value = rect.top;
+        containerBottom.value = rect.bottom;
       }
 
+      // scrollY.value = window.scrollY;
+
+       const maxStickyTop = props.navbarHeight;
+      // Only update dropdown stickiness if open
+      if (showFilterDropdown.value && dropdownContainer.value) {
+        const dropdownRect = dropdownContainer.value.getBoundingClientRect();
+
+        if (dropdownRect.top < STICKY_TOP) {
+          isSticky.value = true;
+          dropdownTop.value = Math.min(window.scrollY + STICKY_TOP, maxStickyTop);
+          
+        } else {
+          isSticky.value = false;
+          updateDropdownPosition();
+        }
+
+        if (dropdownMenu) {
+
+          const dropdownMenuRect = dropdownMenu.value.getBoundingClientRect()
+          const dropdownMenuStyle = window.getComputedStyle(dropdownMenu.value)
+          const padding = parseFloat(dropdownMenuStyle.padding)
+          dropdownMenuHeight.value = dropdownMenuRect.height
+
+          const sectionRect = smartTimersContainer.value.getBoundingClientRect()
+          if (sectionRect.bottom <= dropdownMenuRect.height + maxStickyTop + (2 * padding)) {
+            dropdownTop.value = dropdownTop.value -
+              (dropdownMenuRect.height + maxStickyTop + (2 * padding) - sectionRect.bottom)
+          }
+        }
+
+      }
+    }
+
+
+    onMounted(() => {
+      window.addEventListener('scroll', onScroll)
+      nextTick(updateContainerPosition)
     })
-  }
-  // Listen to scroll, recalc stickiness & top
-function onScroll() {
-  console.log("navbarHeight:", props.navbarHeight)
-  // Always update these:
-  if (smartTimersContainer.value) {
-    const rect = smartTimersContainer.value.getBoundingClientRect();
-    containerTop.value = rect.top;
-    containerBottom.value = rect.bottom;
-  }
+        
+    onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 
-  // scrollY.value = window.scrollY;
-
-  const maxStickyTop = props.navbarHeight;
-  // Only update dropdown stickiness if open
-  if (showFilterDropdown.value && dropdownContainer.value) {
-    const dropdownRect = dropdownContainer.value.getBoundingClientRect();
-
-    if (dropdownRect.top < STICKY_TOP) {
-      isSticky.value = true;
-      dropdownTop.value = Math.min(window.scrollY + STICKY_TOP, maxStickyTop);
-      
-    } else {
-      isSticky.value = false;
-      updateDropdownPosition();
-    }
-
-    if (dropdownMenu) {
-
-      const activeTimersContainerRect = activeTimersContainer.value.getBoundingClientRect()
-
-      const dropdownMenuRect = dropdownMenu.value.getBoundingClientRect()
-      const dropdownMenuStyle = window.getComputedStyle(dropdownMenu.value)
-      const padding = parseFloat(dropdownMenuStyle.padding)
-      dropdownMenuHeight.value = dropdownMenuRect.height
-      if (activeTimersContainerRect.bottom <= dropdownMenuRect.height + maxStickyTop + (2 * padding)) {
-        dropdownTop.value = dropdownTop.value - (dropdownMenuRect.height + maxStickyTop + (2 * padding) - activeTimersContainerRect.bottom)
+    const smartTimersExtraSpace = computed(() => {
+      if (showFilterDropdown.value && dropdownMenuHeight.value) {
+        return `padding-top: ${dropdownMenuHeight.value + 16}px;`
       }
-    }
+      return ''
+    })
 
-  }
-}
-
-
-  onMounted(() => {
-    window.addEventListener('scroll', onScroll)
-    nextTick(updateContainerPosition)
-  })
-      
-  onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
-
-  // Style for dropdown
-  const dropdownStyle = computed(() => {
-    if (!showFilterDropdown.value) return {}
-    if (isSticky.value) {
-      console.log("dropdownTop.value:", dropdownTop.value)
-      console.log("dropdownLeft.value:", dropdownLeft.value)
-      return `position:fixed;top:${dropdownTop.value}px;left:${dropdownLeft.value}px;z-index:99;`
-    }
-    return 'position:absolute;z-index:99;'
-  })
-  // const dropdownStyle = computed(() => {
-  //   if (!showFilterDropdown.value) return {}
-  //   if (isSticky.value) {
-  //     return `min-width:200px;position:fixed;top:${dropdownTop.value}px;left:${dropdownLeft.value}px;z-index:99;`
-  //   }
-  //   return 'min-width:200px;position:absolute;z-index:100;'
-  // })
-
-
+    // Style for dropdown
+    const dropdownStyle = computed(() => {
+      if (!showFilterDropdown.value) return {}
+      if (isSticky.value) {
+        console.log("dropdownTop.value:", dropdownTop.value)
+        console.log("dropdownLeft.value:", dropdownLeft.value)
+        return `position:fixed;top:${dropdownTop.value}px;left:${dropdownLeft.value}px;z-index:99;`
+      }
+      return 'position:absolute;z-index:99;'
+    })
 
     // Filter state
     const filters = ref({
@@ -280,7 +302,9 @@ function onScroll() {
       historical: false,
       keyword: '',
       minDuration: null,
-      maxDuration: null
+      maxDuration: null,
+      startDate: null,
+      endDate: null
     })
 
     const allTimers = computed(() => Object.values(props.smartTimersApi.smartTimers))
@@ -316,6 +340,33 @@ function onScroll() {
       if (filters.value.maxDuration != null && filters.value.maxDuration !== '') {
           timers = timers.filter(t => getInitialMinutes(t) <= filters.value.maxDuration)
       }
+
+      const start = filters.value.startDate ? new Date(filters.value.startDate) : null
+      const end = filters.value.endDate ? new Date(filters.value.endDate) : null
+
+      if (start || end) {
+        timers = timers.filter(t => {
+          // For active timers: compare created_at / updated_at
+          // For historical timers: compare end_time
+          let compareDate = null
+
+          if (!t.end_time) {
+            // active
+            compareDate = new Date(t.updatedAt || t.createdAt)
+          } else {
+            // historical
+            compareDate = new Date(t.endime)
+          }
+
+          if (start && compareDate < start) return false
+          if (end && compareDate > end) return false
+          return true
+        })
+      }
+   
+      // sort timers newest to oldest
+      timers = timers.sort((a, b) => b.id - a.id)
+
       return timers
     })
 
@@ -333,9 +384,10 @@ function onScroll() {
     // State for duplication
     const showCreateForm = ref(false)
     const duplicateTimerData = ref(null)
+    const createForm = ref(null)
 
     // Show the timer create form with data from the duplicated timer
-    function handleDuplicateTimer(timer) {
+    async function handleDuplicateTimer(timer) {
       duplicateTimerData.value = {
         label: timer.label || '',
         description: timer.description || '',
@@ -343,12 +395,18 @@ function onScroll() {
         // You may use 'duration' directly if that's what the form expects
       }
       showCreateForm.value = true
+      await nextTick()
+      createForm.value?.$refs.firstInput?.focus()
     }
 
     // Standard timer creation handler, clears duplication state after use
     function handleTimerCreate(timerData) {
       emit('create', timerData)
       duplicateTimerData.value = null
+      showCreateForm.value = false
+    }
+
+    function handleTimerCancel() {
       showCreateForm.value = false
     }
 
@@ -370,6 +428,7 @@ function onScroll() {
       isSticky,
       dropdownTop,
       dropdownLeft,
+      smartTimersExtraSpace,
       dropdownStyle,
       dropdownContainer,
       activeTimersContainer,
@@ -378,6 +437,7 @@ function onScroll() {
       activeTimers,
       historicalTimers,
       handleTimerCreate,
+      handleTimerCancel,
       handleDuplicateTimer,
       showCreateForm,
       duplicateTimerData,
