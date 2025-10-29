@@ -42,7 +42,6 @@ export async function frontendAuthFetch(endpoint, options) {
 
 export async function frontendFetch(endpoint, options = {}) {
   const base = import.meta.env.VITE_BASE_PATH || '/';
-  console.log("what is base frotFetch: ", base)
   // Remove double slashes
   const url = base.replace(/\/+$/, '') + '/' + endpoint.replace(/^\/+/, '');
   return fetch(url, options)

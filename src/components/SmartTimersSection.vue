@@ -190,7 +190,7 @@ export default {
       () => props.navbarHeight,
       (newVal, oldVal) => {
         // This runs every time navbarHeight changes
-        console.log('navbarHeight changed from', oldVal, 'to', newVal)
+        // console.log('navbarHeight changed from', oldVal, 'to', newVal)
         // You can react to the change here (recalculate positions, etc.)
       },
       { immediate: true } // Run right away with the initial value
@@ -229,7 +229,7 @@ export default {
     }
     // Listen to scroll, recalc stickiness & top
     function onScroll() {
-      console.log("navbarHeight:", props.navbarHeight)
+      // console.log("navbarHeight:", props.navbarHeight)
       // Always update these:
       if (smartTimersContainer.value) {
         const rect = smartTimersContainer.value.getBoundingClientRect();

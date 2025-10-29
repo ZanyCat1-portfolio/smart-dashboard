@@ -104,7 +104,6 @@ export default {
 
   computed: {
     isTimerRunning() {
-      console.log("what is timerState?", this.timerState)
       return this.timerState && this.timerState.running
     }
   },

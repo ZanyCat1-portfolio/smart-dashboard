@@ -105,7 +105,7 @@
                 <component
                   :is="getCardComponent(device)"
                   :device="device"
-                  :state="deviceStates[device.endpoint]"
+                  :state="deviceStates[device.endpoint] || ''"
                   :theme="theme"
                   :get-api-route="getApiRoute"
                   :timer-state="timerStates[device.endpoint]"
@@ -142,6 +142,7 @@ import RegisterForm from './components/RegisterForm.vue'
 import SmartTimersSection from './components/SmartTimersSection.vue'
 import { state as sessionState, useSession } from './composables/useSessions'
 import { frontendFetch } from './utils/utils'
+// import deviceStore from './stores/deviceStore'
 
 const navbarRef = ref(null)
 const navbarHeight = ref(0)
@@ -197,6 +198,9 @@ export default {
       navbarHeight: 0,
     }
   },
+  async created() {
+    await this.loadDevices();
+  },
   computed: {
     groupedDevices() {
       const groups = this.devices.reduce((groups, device) => {
@@ -251,12 +255,12 @@ export default {
     this.$nextTick(() => {
       if (this.$refs.navbarRef) {
         this.navbarHeight = this.$refs.navbarRef.getBoundingClientRect().height;
-        console.log('Measured navbarHeight:', this.navbarHeight);
+        // console.log('Measured navbarHeight:', this.navbarHeight);
       }
     });
 
     // 2. All other awaits and DOM logic after handlers
-    await this.loadDevices();
+    // await this.loadDevices();
     Object.keys(this.groupedDevices).forEach(type => { this.openGroups[type] = true; });
     this.openGroups.smartTimers = true;
     const saved = localStorage.getItem('theme');
@@ -413,6 +417,14 @@ export default {
     async cancelDeviceTimer(device) {
       await this.cancelTimer(device)
     },
+    // async loadDevices() {
+    //   const { devices, meta } = await deviceStore.getDevices(frontendFetch)
+    //   this.devices = devices
+    //   if (meta?.example) {
+    //     this.isExampleFile = true
+    //     this.exampleInfo = meta.info
+    //   }
+    // },
     async loadDevices() {
       const res = await frontendFetch(`/api/tasmota/devices`, { cache: 'no-store' })
       const map = await res.json()

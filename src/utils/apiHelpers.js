@@ -20,6 +20,8 @@ function loadDevices() {
       };
     }
   });
+  console.log("what is devices:")
+  console.log(devices)
   return devices;
 }
 

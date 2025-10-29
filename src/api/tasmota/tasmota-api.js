@@ -135,6 +135,7 @@ module.exports = (io) => {
     
     // Devices list endpoint (only verified devices)
     router.get('/devices', (req, res) => {
+      console.log("/api/tasmota/devices")
       try {
           res.json(JSON.parse(fs.readFileSync(DEVICES_PATH, 'utf8')));
         } catch (error) {

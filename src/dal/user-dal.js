@@ -5,7 +5,7 @@ const userDAL = {
   createUser: ({ username, email, passwordHash }) => {
     const now = new Date().toISOString();
     const res = db.run(
-      `INSERT INTO users (username, email, passwordHash, active, created_at)
+      `INSERT INTO users (username, email, password_hash, active, created_at)
       VALUES (?, ?, ?, 1, ?)`,
       username, email || null, passwordHash, now
     );
