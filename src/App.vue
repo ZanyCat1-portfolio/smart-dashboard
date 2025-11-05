@@ -198,9 +198,6 @@ export default {
       navbarHeight: 0,
     }
   },
-  async created() {
-    await this.loadDevices();
-  },
   computed: {
     groupedDevices() {
       const groups = this.devices.reduce((groups, device) => {
@@ -227,9 +224,6 @@ export default {
     },
   },
   async mounted() {
-    console.log("App vue mounted")
-    // this.logout()
-
     // 1. Register all composables immediately!
     const tasmotaApi = useTasmotaTimers({ socket, getApiRoute: this.getApiRoute });
     const smartTimersApi = useSmartTimers({ socket });
@@ -255,12 +249,10 @@ export default {
     this.$nextTick(() => {
       if (this.$refs.navbarRef) {
         this.navbarHeight = this.$refs.navbarRef.getBoundingClientRect().height;
-        // console.log('Measured navbarHeight:', this.navbarHeight);
       }
     });
 
     // 2. All other awaits and DOM logic after handlers
-    // await this.loadDevices();
     Object.keys(this.groupedDevices).forEach(type => { this.openGroups[type] = true; });
     this.openGroups.smartTimers = true;
     const saved = localStorage.getItem('theme');
@@ -268,12 +260,14 @@ export default {
     document.body.classList.toggle('dark-mode', this.theme === 'dark');
     document.getElementById('app')?.classList.add(this.theme);
 
-    await Promise.all(
+    await this.loadDevices();
+    
+    Promise.all(
       this.devices.map(async device => {
         await this.fetchStatus(device);
         await this.fetchTimerStatus(device);
       })
-    );
+    )
 
     this.loadingDevices = false;
 
@@ -287,7 +281,6 @@ export default {
       sessionState.user = null;
       localStorage.removeItem('user')
     }
-
   },
   beforeUnmount() {
     if (this.dashboardTimerPoll) clearInterval(this.dashboardTimerPoll);
@@ -310,39 +303,6 @@ export default {
       localStorage.setItem('user', JSON.stringify(user));
       this.startLoginTimer();
     },
-    // async login() {
-    //   console.log('NO THIS IS GETTING CALL')
-    //   this.loginError = null;
-    //   const username = this.username.trim();
-    //   console.log("on login, what is username: ", !!username)
-    //   if (!username) return;
-    //   console.log("Do I here?")
-
-    //   try {
-    //     // 1. Validate user (create if not found)
-    //     let user = await this.usersApi.getUserByUsername(username);
-    //     if (!user) {
-    //       user = await this.usersApi.createUser(username);
-    //       if (!user) throw new Error("Failed to create user");
-    //     }
-    //     sessionState.user = user
-
-    //     // 2. Save username to suggestions
-    //     let suggestions = this.userSuggestions;
-    //     if (!suggestions.includes(username)) {
-    //       suggestions.push(username);
-    //       localStorage.setItem('usernames', JSON.stringify(suggestions));
-    //     }
-    //     // Optionally persist logged in user
-    //     localStorage.setItem('user', JSON.stringify(user));
-
-    //     // 3. Start login timer
-    //     this.startLoginTimer();
-
-    //   } catch (e) {
-    //     this.loginError = e.message || "Login failed";
-    //   }
-    // },
     async logout() {
       await useSession().logout();
       localStorage.setItem('user', '');
@@ -360,8 +320,6 @@ export default {
       this.loginTimer = null;
     },
     async handleTimerCreate(timerData) {
-      console.log("what is timerdata now:", timerData)
-      // console.log("DO I HAPPEN?")
       // SHOULD THIS HAPPEN IN SMARTTIMER COMPONENT?
       // Example: Send the timer data to your backend to create a new timer
       try {
@@ -384,7 +342,6 @@ export default {
       }
     },
     async onDeviceUnregistered() {
-      console.log("Is this even happeNING?>?ASDF")
       try {
         if (!this.registeredDeviceInfo?.deviceId) {
           throw new Error('No registered device ID found');
@@ -417,14 +374,6 @@ export default {
     async cancelDeviceTimer(device) {
       await this.cancelTimer(device)
     },
-    // async loadDevices() {
-    //   const { devices, meta } = await deviceStore.getDevices(frontendFetch)
-    //   this.devices = devices
-    //   if (meta?.example) {
-    //     this.isExampleFile = true
-    //     this.exampleInfo = meta.info
-    //   }
-    // },
     async loadDevices() {
       const res = await frontendFetch(`/api/tasmota/devices`, { cache: 'no-store' })
       const map = await res.json()
@@ -463,7 +412,6 @@ export default {
     },
     scrollToGroup(type) {
       const el = this.$refs[`group-${type}`]?.[0];
-      console.log("el is:", el)
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     },
     getApiRoute(device, action) {
