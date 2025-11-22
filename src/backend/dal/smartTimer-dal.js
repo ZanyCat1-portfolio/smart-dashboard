@@ -1,4 +1,4 @@
-const db = require('../../db/db');
+const db = require('../../../db/db');
 const SmartTimer = require('../models/SmartTimer');
 
 const recipientDAL = require('./recipient-dal')

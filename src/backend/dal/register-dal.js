@@ -1,4 +1,4 @@
-const db = require('../../db/db');
+const db = require('../../../db/db');
 
 function insertUser({ username, passwordHash, createdAt }) {
   const result = db.run(

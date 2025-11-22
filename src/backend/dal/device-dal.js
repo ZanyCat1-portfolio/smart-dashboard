@@ -1,6 +1,6 @@
 // pushSubscription stored as json, but I think db field wanted string. Is this going to be okay? We only needed one part of the subscription, I think its called endpoint?
 
-const db = require('../../db/db');
+const db = require('../../../db/db');
 const Device = require('../models/Device');
 
 const deviceDAL = {

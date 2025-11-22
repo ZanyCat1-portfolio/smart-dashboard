@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
 
 
   return {
+    root: './src/frontend',
     base: basePath,
     plugins: [
       vue(),

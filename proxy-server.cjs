@@ -1,29 +1,62 @@
-// ───── Initial Setup & Imports ─────
+// ═══════════════════════════════════════════════════════════════
+// IMPORTS & SETUP
+// ═══════════════════════════════════════════════════════════════
+
+// ─── Environment & Verification ───
 require('./verify-devices');
 require('dotenv').config();
 
-const express  = require('express');
-const http     = require('http');
-const https     = require('https');
-const path     = require('path');
-const fs       = require('fs');
-// const mqtt     = require('mqtt');
-const mqttClient = require('./src/mqtt/mqtt-client');
+// ─── Core Node Modules ───
+const path = require('path');
+const fs = require('fs');
+const http = require('http');
+const https = require('https');
+
+// ─── Express & Middleware ───
+const express = require('express');
+const session = require('express-session');
+
+// ─── WebSocket & Push Notifications ───
 const { Server } = require('socket.io');
-const { getCurrentDemoTimerStates } = require('./src/utils/apiHelpers');
-const fetch    = (...args) => import('node-fetch').then(({default: f}) => f(...args));
-const { publishSmartTimerState, subscribeSmartTimerTopics } = require('./src/utils/smartTimer-mqtt')
-const { logMqtt } = require('./src/utils/logger');
+const webpush = require('web-push');
+
+// ─── MQTT ───
+const mqttClient = require('./src/backend/mqtt/mqtt-client');
+
+// ─── Backend Utilities ───
+const { getCurrentDemoTimerStates } = require('./src/backend/utils/apiHelpers');
+const { publishSmartTimerState, subscribeSmartTimerTopics } = require('./src/backend/utils/smartTimer-mqtt');
+const { logMqtt } = require('./src/backend/utils/logger');
+
+// ─── Data Access Layer ───
+const smartTimerDAL = require('./src/backend/dal/smartTimer-dal.js');
+
+// ─── API Routes ───
+const apiRouter = require('./src/backend/api');
+
+// ─── Dynamic Import ───
+const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIGURATION
+// ═══════════════════════════════════════════════════════════════
 
 const USE_HTTPS = process.env.USE_HTTPS === '1' || process.env.USE_HTTPS === 'true';
+const MQTT_URL = process.env.MQTT_URL || 'mqtt://localhost:1883';
+const PORT = process.env.PORT || 8080;
+const basePath = process.env.BASE_PATH || '/';
+const normalizedBase = basePath.endsWith('/') ? basePath : basePath + '/';
 
-// ---- New: Import SmartTimer DAL for DB operations (adjust path as needed)
-const smartTimerDAL = require('./src/dal/smartTimer-dal.js');
+const oneDay = 1000 * 60 * 60 * 24;
+const daysLoggedIn = 30;
 
-// ───── Config & Helpers ─────
+// ═══════════════════════════════════════════════════════════════
+// SERVER SETUP
+// ═══════════════════════════════════════════════════════════════
 
-const app    = express();
+const app = express();
 
+// Create HTTP or HTTPS server
 let server;
 if (USE_HTTPS) {
   const options = {
@@ -37,55 +70,68 @@ if (USE_HTTPS) {
   console.log("[startup] HTTP enabled.");
 }
 
+// Socket.IO setup
 const io = new Server(server, { 
   cors: { origin: '*' }, 
   path: process.env.BASE_PATH ? process.env.BASE_PATH.replace(/\/?$/, '') + '/socket.io' : '/socket.io'
 });
-const eventBus = require('./src/utils/eventBus.js');
+
+// Event bus setup (note: this imports from frontend utils, might need adjustment)
+const eventBus = require('./src/backend/utils/eventBus.js');
 eventBus.setIo(io);
 
-app.use(express.json());
-
-// Web Push setup (for push notifications)
-const webpush = require('web-push');
+// Web Push setup
 webpush.setVapidDetails(
   'mailto:you@example.com',
   process.env.VAPID_PUBLIC_KEY,
   process.env.VAPID_PRIVATE_KEY
 );
 
+// ═══════════════════════════════════════════════════════════════
+// MIDDLEWARE
+// ═══════════════════════════════════════════════════════════════
 
-// Logging helper (show only in dev unless forced)
+app.use(express.json());
+
+app.use(session({
+  secret: 'your-secret-here',
+  resave: false,
+  saveUninitialized: false,
+  rolling: true,
+  cookie: {
+    maxAge: oneDay * daysLoggedIn,
+    httpOnly: true,
+  }
+}));
+
+// Request logging (development only)
+app.use((req, res, next) => {
+  devLog('[EXPRESS] Request:', req.method, req.url);
+  next();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+
 function devLog(...args) {
-  if (
-    process.env.NODE_ENV !== 'production' ||
-    process.env.FORCE_LOG === 'true'
-  ) {
+  if (process.env.NODE_ENV !== 'production' || process.env.FORCE_LOG === 'true') {
     console.log(...args);
   }
 }
 
-// ---- Base path config ----
-const basePath        = process.env.BASE_PATH || '/';
-const normalizedBase  = basePath.endsWith('/') ? basePath : basePath + '/';
-// console.log("what is base path?:", process.env.BASE_PATH)
+function logError(...args) {
+  console.error(...args);
+}
 
+// ═══════════════════════════════════════════════════════════════
+// MQTT SETUP
+// ═══════════════════════════════════════════════════════════════
 
-// Expose VAPID public key to the frontend
-app.get(normalizedBase + 'api/vapid-public-key', (req, res) => {
-  res.type('text/plain').send(process.env.VAPID_PUBLIC_KEY);
-});
+// Subscribe to SmartTimer topics
+subscribeSmartTimerTopics(mqttClient, io, smartTimerDAL);
 
-// ───── MQTT Bridge (for Real Devices & SmartTimers) ─────
-
-const MQTT_URL = process.env.MQTT_URL || 'mqtt://localhost:1883';
-// const mqttClient = mqtt.connect(MQTT_URL, {
-//   username: process.env.MQTT_USER,
-//   password: process.env.MQTT_PASS,
-// });
-subscribeSmartTimerTopics(mqttClient, io, smartTimerDAL)
-
-// ---- Existing device MQTT subscribe logic
+// MQTT connection handler
 mqttClient.on('connect', () => {
   logMqtt(`Connected to ${MQTT_URL}`);
   mqttClient.subscribe(
@@ -93,7 +139,6 @@ mqttClient.on('connect', () => {
       'stat/+/RESULT',
       'stat/+/POWER',
       'tele/+/STATE',
-      // --- New: Subscribe to SmartTimer control topics
       'smarthome/smarttimer/+/command'
     ],
     error => error
@@ -102,11 +147,12 @@ mqttClient.on('connect', () => {
   );
 });
 
+// MQTT message handler
 mqttClient.on('message', (topic, payload) => {
   const msg = payload.toString();
   let endpoint, state, m;
 
-  // ---- Existing Tasmota MQTT handling
+  // ─── Handle Tasmota device messages ───
   if ((m = topic.match(/^stat\/(.+?)\/RESULT$/))) {
     endpoint = m[1].toLowerCase();
     try { state = JSON.parse(msg).POWER.toLowerCase(); } catch {}
@@ -123,18 +169,16 @@ mqttClient.on('message', (topic, payload) => {
     io.emit('device-status', { endpoint, state });
   }
 
-  // ---- New: Handle SmartTimer MQTT control topics
+  // ─── Handle SmartTimer MQTT commands ───
   if (topic.startsWith('smarthome/smarttimer/')) {
     const parts = topic.split('/');
     const timerId = parts[2];
-    const action = parts[3]; // Should be "command"
+    const action = parts[3];
     let payloadObj = {};
     try { payloadObj = JSON.parse(msg); } catch {}
 
     devLog(`[MQTT][SmartTimer] Received command for timer ${timerId}:`, payloadObj);
 
-    // EXAMPLE: Handle supported commands from MQTT
-    // E.g. payload: { action: 'start', duration: 600 }
     if (action === 'command' && payloadObj.action) {
       switch (payloadObj.action) {
         case 'start':
@@ -151,94 +195,72 @@ mqttClient.on('message', (topic, payload) => {
           smartTimerDAL.pauseTimer(timerId);
           io.emit('smart-timer-update', { id: timerId, state: 'paused' });
           break;
-        // Add more actions as needed
       }
     }
   }
 });
 
-// ---- Existing: On connection, emit demo timer state
-io.on('connection', (socket) => {
-  // console.log('[SOCKET.IO] Client connected:', socket.id);
+// ═══════════════════════════════════════════════════════════════
+// SOCKET.IO HANDLERS
+// ═══════════════════════════════════════════════════════════════
 
+io.on('connection', (socket) => {
+  // Send demo timer snapshot
   const demoTimers = getCurrentDemoTimerStates();
   socket.emit('timer-snapshot', demoTimers);
-  // console.log('[SOCKET.IO] Sent timer-snapshot:', demoTimers);
 
-  const { smartTimers } = require('./src/data/smartTimers.js');
+  // Send smart timers snapshot
+  const { smartTimers } = require('./src/backend/data/smartTimers.js');
   socket.emit('smart-timer-snapshot', Object.values(smartTimers));
-  // console.log('[SOCKET.IO] Sent smart-timer-snapshot:', smartTimers);
 
-  // Devices:
-  const { devices } = require('./src/data/devices');
-    socket.emit('devices:snapshot', Object.values(devices));
-    // console.log('[SOCKET.IO] Sent devices:snapshot:', devices);
+  // Send devices snapshot
+  const { devices } = require('./src/backend/data/devices');
+  socket.emit('devices:snapshot', Object.values(devices));
 
-    // Users:
-    const { users } = require('./src/data/users');
-    socket.emit('users:snapshot', Object.values(users).map(({ passwordHash, ...u}) => u));
-    // console.log('[SOCKET.IO] Sent users:snapshot:', users);
-  });
-
-  const session = require('express-session');
-  const oneDay = 1000 * 60 * 60 * 24;
-  const daysLoggedIn = 30
-
-  app.use((req, res, next) => {
-    // console.log('[EXPRESS] Request:', req.method, req.url);
-    next();
-  });
-
-  app.use(session({
-    secret: 'your-secret-here',
-    resave: false,
-    saveUninitialized: false,
-    rolling: true,
-    cookie: {
-      maxAge: oneDay * daysLoggedIn,
-      httpOnly: true,
-    }
-  }));
-
-// ───── All Routers from /src/api:  ─────
-const apiRouter = require('./src/api')(io);
-app.use((req, res, next) => {
-  // console.log('[EXPRESS] Request:', req.method, req.url);
-  next();
+  // Send users snapshot (without password hashes)
+  const { users } = require('./src/backend/data/users');
+  socket.emit('users:snapshot', Object.values(users).map(({ passwordHash, ...u}) => u));
 });
-app.use(normalizedBase + 'api', apiRouter); // gives /api to url
 
-// ───── Static File Serving & SPA Fallback ─────
+// ═══════════════════════════════════════════════════════════════
+// API ROUTES
+// ═══════════════════════════════════════════════════════════════
 
-app.use((req, res, next) => {
-  console.log('[EXPRESS] Request:', req.method, req.url);
-  next();
+// VAPID public key endpoint
+app.get(normalizedBase + 'api/vapid-public-key', (req, res) => {
+  res.type('text/plain').send(process.env.VAPID_PUBLIC_KEY);
 });
-// Serve static assets from /public at root (for favicon, etc)
+
+// Mount all API routes
+app.use(normalizedBase + 'api', apiRouter(io));
+
+// ═══════════════════════════════════════════════════════════════
+// STATIC FILE SERVING & SPA FALLBACK
+// ═══════════════════════════════════════════════════════════════
+
+// Serve static assets from /public
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use((req, res, next) => {
-  console.log('[EXPRESS] Request:', req.method, req.url);
-  next();
-});
-// Serve frontend (built SPA) from /<basePath>
+// Serve frontend SPA from /dist
 app.use(normalizedBase, express.static(path.join(__dirname, 'dist')));
 
-// SPA fallback: any GET under /<basePath>/* not matching a static file → index.html
+// SPA fallback for client-side routing
 app.get(normalizedBase + '*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// const listEndpoints = require('express-list-endpoints');
-// console.log(listEndpoints(app));
+// ═══════════════════════════════════════════════════════════════
+// START SERVER
+// ═══════════════════════════════════════════════════════════════
 
-// ───── Start Server ─────
-
-const PORT = process.env.PORT || 8080;
 server.listen(PORT, '0.0.0.0', () => {
   devLog(`🚀 Dashboard + WS listening on port ${PORT} (base: ${normalizedBase})`);
 });
 
+// ═══════════════════════════════════════════════════════════════
+// EXPORTS
+// ═══════════════════════════════════════════════════════════════
+
 module.exports = {
   mqttClient
-}
+};

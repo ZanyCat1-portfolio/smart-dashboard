@@ -1,4 +1,4 @@
-const db = require('../../db/db');
+const db = require('../../../db/db');
 const User = require('../models/User');
 
 const userDAL = {

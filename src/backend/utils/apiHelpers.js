@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 
-const DEVICES_PATH = path.join(__dirname, '..', '..', 'public', 'devices.json');
+const DEVICES_PATH = path.join(__dirname, '..', '..', '..', 'public', 'devices.json');
 // console.log('Loading devices from:', DEVICES_PATH);
 
 let ioInstance;
