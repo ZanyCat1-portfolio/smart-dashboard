@@ -1,6 +1,6 @@
 // all urls start with /api due to proxy-server.cjs app.use statement
 
-module.exports = (io) => {
+module.exports = (io, deviceStates) => {
     const express = require('express');
     const router = express.Router();
 
@@ -9,7 +9,7 @@ module.exports = (io) => {
     const userApi = require('./smartTimer/user-api')(io);
 
     const exampleTasmotaApi = require('./tasmota/example-tasmota-api')(io);
-    const tasmotaApi = require('./tasmota/tasmota-api')(io);
+    const tasmotaApi = require('./tasmota/tasmota-api')(io, deviceStates);
 
     const exampleGoveeApi = require('./govee/example-govee-api')(io);
     const goveeApi = require('./govee/govee-api')(io);

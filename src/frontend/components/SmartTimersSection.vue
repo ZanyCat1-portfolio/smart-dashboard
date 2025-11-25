@@ -129,18 +129,20 @@
         </div>
 
         <!-- Historical Timers Group -->
-        <div v-if="historicalTimers.length" class="mt-4">
+        <div v-if="groupedHistoricalTimers.length" class="mt-4">
           <h3 class="mb-4">Historical Timers</h3>
           <div class="historical-timers-container">
               <div class="row row-cols-1 row-cols-md-2 g-4">
-                <div v-for="timer in historicalTimers" :key="timer.id" class="col">
+                <div v-for="timer in groupedHistoricalTimers" :key="timer.id" class="col">
                   <SmartTimerCard
                     :timer="timer"
                     :smart-timers-api="smartTimersApi"
                     :users-api="usersApi"
                     :devices-api="devicesApi"
                     :is-historical="true"
+                    :history-count="timer.historyCount"
                     @duplicate="handleDuplicateTimer"
+                    @view-history="$emit('view-history', timer.label)"
                   />
                 </div>
               </div>
@@ -381,6 +383,28 @@ export default {
         filteredTimers.value.filter(t => !t.active)
     )
 
+    // Group historical timers by label (case-insensitive) and show only most recent per group
+    const groupedHistoricalTimers = computed(() => {
+      const allHistorical = filteredTimers.value.filter(t => !t.active && (t.state === 'finished' || t.state === 'canceled'));
+      const grouped = {};
+
+      allHistorical.forEach(timer => {
+        const normalizedLabel = timer.label.toLowerCase().trim();
+        if (!grouped[normalizedLabel]) {
+          grouped[normalizedLabel] = [];
+        }
+        grouped[normalizedLabel].push(timer);
+      });
+
+      // For each group, sort by end_time desc and take most recent, add history count
+      return Object.entries(grouped).map(([normalizedLabel, timers]) => {
+        timers.sort((a, b) => new Date(b.endTime || b.end_time || b.updatedAt) - new Date(a.endTime || a.end_time || a.updatedAt));
+        const mostRecent = timers[0];
+        mostRecent.historyCount = timers.length - 1; // Don't count the displayed one
+        return mostRecent;
+      }).sort((a, b) => new Date(b.endTime || b.end_time || b.updatedAt) - new Date(a.endTime || a.end_time || a.updatedAt)); // Sort groups by most recent
+    })
+
     // State for duplication
     const showCreateForm = ref(false)
     const duplicateTimerData = ref(null)
@@ -436,6 +460,7 @@ export default {
       filters,
       activeTimers,
       historicalTimers,
+      groupedHistoricalTimers,
       handleTimerCreate,
       handleTimerCancel,
       handleDuplicateTimer,

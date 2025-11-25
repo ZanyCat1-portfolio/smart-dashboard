@@ -76,6 +76,7 @@
           :session-state="sessionState"
           :navbar-height="navbarHeight"
           @create="handleTimerCreate"
+          @view-history="handleViewHistory"
         />
 
         <!-- DEVICE GROUPS -->
@@ -119,6 +120,18 @@
             </div>
           </div>
         </div>
+
+        <!-- TIMER HISTORY MODAL -->
+        <SmartTimerHistoryModal
+          :show="showHistoryModal"
+          :selected-label="historyModalLabel"
+          :smart-timers-api="smartTimersApi"
+          :users-api="usersApi"
+          :devices-api="devicesApi"
+          :all-timers="Object.values(smartTimersApi.smartTimers)"
+          @close="showHistoryModal = false"
+          @duplicate-timer="handleDuplicateTimerFromHistory"
+        />
       </div>
     </div>
   </div>
@@ -140,6 +153,7 @@ import { refreshLoginTimer } from './utils/utils'
 import LoginForm from './components/LoginForm.vue'
 import RegisterForm from './components/RegisterForm.vue'
 import SmartTimersSection from './components/SmartTimersSection.vue'
+import SmartTimerHistoryModal from './components/SmartTimerHistoryModal.vue'
 import { state as sessionState, useSession } from './composables/useSessions'
 import { frontendFetch } from './utils/utils'
 // import deviceStore from './stores/deviceStore'
@@ -164,7 +178,8 @@ export default {
     DeviceRegistration,
     LoginForm,
     RegisterForm,
-    SmartTimersSection
+    SmartTimersSection,
+    SmartTimerHistoryModal
   },
   data() {
     return {
@@ -196,6 +211,8 @@ export default {
       showRegister: false,
       sessionState,
       navbarHeight: 0,
+      showHistoryModal: false,
+      historyModalLabel: '',
     }
   },
   computed: {
@@ -246,6 +263,14 @@ export default {
 
     window.smartTimerStates = smartTimersApi.smartTimerStates;
 
+    // Listen for device states snapshot
+    socket.on('device-states:snapshot', (snapshot) => {
+      for (const [endpoint, { state }] of Object.entries(snapshot)) {
+        this.deviceStates[endpoint] = state;
+      }
+      devLog('[Socket] Loaded device states from snapshot:', Object.keys(this.deviceStates).length);
+    });
+
     this.$nextTick(() => {
       if (this.$refs.navbarRef) {
         this.navbarHeight = this.$refs.navbarRef.getBoundingClientRect().height;
@@ -253,21 +278,23 @@ export default {
     });
 
     // 2. All other awaits and DOM logic after handlers
-    Object.keys(this.groupedDevices).forEach(type => { this.openGroups[type] = true; });
-    this.openGroups.smartTimers = true;
     const saved = localStorage.getItem('theme');
     if (saved) this.theme = saved;
     document.body.classList.toggle('dark-mode', this.theme === 'dark');
     document.getElementById('app')?.classList.add(this.theme);
 
     await this.loadDevices();
-    
+
+    // Now that devices are loaded, initialize group states
+    Object.keys(this.groupedDevices).forEach(type => { this.openGroups[type] = true; });
+    this.openGroups.smartTimers = true;
+
+    // Load initial states from cache instead of fetching each
     Promise.all(
       this.devices.map(async device => {
-        await this.fetchStatus(device);
-        await this.fetchTimerStatus(device);
+        await this.fetchTimerStatus(device); // still need timers
       })
-    )
+    );
 
     this.loadingDevices = false;
 
@@ -475,6 +502,22 @@ export default {
         default:        return 'TasmotaCard';
       }
     },
+    devLog(...args) {
+      if (!import.meta.env.PROD || localStorage.getItem('DEBUG') === 'true') {
+        console.log(...args);
+      }
+    },
+    handleViewHistory(label) {
+      this.historyModalLabel = label;
+      this.showHistoryModal = true;
+    },
+    handleDuplicateTimerFromHistory(timer) {
+      this.handleTimerCreate({
+        label: timer.label,
+        description: timer.description,
+        minutes: timer.initialDuration ? Math.floor(timer.initialDuration / 60) : null
+      });
+    }
   }
 }
 </script>

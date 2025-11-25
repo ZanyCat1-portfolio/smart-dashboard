@@ -2,10 +2,6 @@
 // IMPORTS & SETUP
 // ═══════════════════════════════════════════════════════════════
 
-// ─── Environment & Verification ───
-require('./verify-devices');
-require('dotenv').config();
-
 // ─── Core Node Modules ───
 const path = require('path');
 const fs = require('fs');
@@ -37,6 +33,10 @@ const apiRouter = require('./src/backend/api');
 // ─── Dynamic Import ───
 const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
 
+// ─── Environment & Verification ───
+require('./verify-devices');
+require('dotenv').config();
+
 // ═══════════════════════════════════════════════════════════════
 // CONFIGURATION
 // ═══════════════════════════════════════════════════════════════
@@ -49,6 +49,66 @@ const normalizedBase = basePath.endsWith('/') ? basePath : basePath + '/';
 
 const oneDay = 1000 * 60 * 60 * 24;
 const daysLoggedIn = 30;
+
+// Device state cache
+const deviceStates = {};
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+function devLog(...args) {
+  if (process.env.NODE_ENV !== 'production' || process.env.FORCE_LOG === 'true') {
+    console.log(...args);
+  }
+}
+
+function logError(...args) {
+  console.error(...args);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DEVICE STATE POLLING
+// ═══════════════════════════════════════════════════════════════
+
+async function pollTasmotaDevicesStatus() {
+  const devicesPath = path.join(__dirname, 'public', 'devices.json');
+  let devices;
+  try {
+    devices = JSON.parse(fs.readFileSync(devicesPath, 'utf8'));
+  } catch (error) {
+    logError('[Poll] Could not read devices.json:', error.message);
+    return;
+  }
+
+  devLog('[Poll] Starting initial device status polling...');
+
+  const promises = [];
+  for (const [key, device] of Object.entries(devices)) {
+    if (key.startsWith('_') || device.type !== 'tasmota' || !device.verified || device.example) continue;
+
+    const endpoint = key.toLowerCase().replace(/\s+/g, '');
+    const statusUrl = `http://${device.ip}/cm?cmnd=STATUS%200`;
+
+    devLog(`[Poll] Polling ${endpoint} at ${device.ip}`);
+
+    promises.push(
+      fetch(statusUrl, { timeout: 5000 })
+        .then(resp => resp.json())
+        .then(data => {
+          const state = data?.Status?.Power === 'ON' || data?.Status?.Power === 'on' || data?.Status?.Power === 1 ? 'on' : 'off';
+          deviceStates[endpoint] = { state, lastUpdated: Date.now() };
+          devLog(`[Poll] ${endpoint} → ${state}`);
+        })
+        .catch(error => {
+          devLog(`[Poll] Failed to poll ${endpoint}:`, error.message);
+        })
+    );
+  }
+
+  await Promise.allSettled(promises);
+  devLog('[Poll] Initial device status polling completed');
+}
 
 // ═══════════════════════════════════════════════════════════════
 // SERVER SETUP
@@ -111,18 +171,11 @@ app.use((req, res, next) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// HELPERS
+// START SERVER EXECUTION
 // ═══════════════════════════════════════════════════════════════
 
-function devLog(...args) {
-  if (process.env.NODE_ENV !== 'production' || process.env.FORCE_LOG === 'true') {
-    console.log(...args);
-  }
-}
-
-function logError(...args) {
-  console.error(...args);
-}
+// Poll device states after verification
+pollTasmotaDevicesStatus();
 
 // ═══════════════════════════════════════════════════════════════
 // MQTT SETUP
@@ -165,6 +218,8 @@ mqttClient.on('message', (topic, payload) => {
   }
 
   if (endpoint && state) {
+    // Update cache
+    deviceStates[endpoint] = { state, lastUpdated: Date.now() };
     devLog(`[MQTT] ${endpoint} → ${state}`);
     io.emit('device-status', { endpoint, state });
   }
@@ -217,6 +272,9 @@ io.on('connection', (socket) => {
   const { devices } = require('./src/backend/data/devices');
   socket.emit('devices:snapshot', Object.values(devices));
 
+  // Send device states snapshot
+  socket.emit('device-states:snapshot', deviceStates);
+
   // Send users snapshot (without password hashes)
   const { users } = require('./src/backend/data/users');
   socket.emit('users:snapshot', Object.values(users).map(({ passwordHash, ...u}) => u));
@@ -232,7 +290,7 @@ app.get(normalizedBase + 'api/vapid-public-key', (req, res) => {
 });
 
 // Mount all API routes
-app.use(normalizedBase + 'api', apiRouter(io));
+app.use(normalizedBase + 'api', apiRouter(io, deviceStates));
 
 // ═══════════════════════════════════════════════════════════════
 // STATIC FILE SERVING & SPA FALLBACK

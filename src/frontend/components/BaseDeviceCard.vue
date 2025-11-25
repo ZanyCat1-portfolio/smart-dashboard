@@ -69,6 +69,25 @@ export default {
   /* Responsive shadow, border */
 }
 
+/* Smart Timer card specific styling for consistent sizing */
+.base-device-card[data-device-type="timer"] {
+  min-height: 350px;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.base-device-card[data-device-type="timer"] .card-body {
+  flex: 1;
+  min-height: 150px;
+  /* Remove max-height and overflow to prevent scrolling */
+}
+
+.base-device-card[data-device-type="timer"] .card-footer {
+  flex-shrink: 0;
+}
+
 /* Responsive adjustments for small screens */
 @media (max-width: 600px) {
   .base-device-card {
@@ -85,6 +104,10 @@ export default {
   .card-title {
     font-size: 1em;
   }
+}
+
+.card-header {
+  position: relative;
 }
 
 .card-title {

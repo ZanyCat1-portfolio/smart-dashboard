@@ -29,6 +29,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     root: './src/frontend',
+    build: {
+      outDir: '../../dist',
+      emptyOutDir: true,
+    },
     base: basePath,
     plugins: [
       vue(),

@@ -1,7 +1,7 @@
 const express = require('express');
 
 // /api/tasmota due to proxy-server.cjs and index.js .use statements
-module.exports = (io) => {
+module.exports = (io, deviceStates) => {
 
     const router = express.Router();
     const fs       = require('fs');
@@ -69,12 +69,35 @@ module.exports = (io) => {
       }
     });
     
-    // Device status for real device
+    // Device status for real device - use cache if available, fallback to live fetch
     router.get('/:device/status', async (req, res) => {
       const { device } = req.params;
       const deviceObj = getDevice(device);
       if (!deviceObj) return res.status(404).json({ error: 'Unknown device' });
-      
+
+      const cachedState = deviceStates[deviceObj.endpoint];
+
+      // Use cache if it's recent (within 5 minutes to be safe)
+      if (cachedState && Date.now() - cachedState.lastUpdated < 5 * 60 * 1000) {
+        // Return a minimal response with Power status
+        const data = {
+          Status: { Power: cachedState.state === 'on' ? 'ON' : 'OFF' },
+          StatusSTS: { POWER: cachedState.state === 'on' ? 'ON' : 'OFF' }
+        };
+        const timer = tasmotaTimers[device];
+        if (timer && timer.endTime > Date.now()) {
+          data.timer = {
+            running: true,
+            endTime: timer.endTime,
+            remainingMs: Math.max(0, timer.endTime - Date.now())
+          };
+        } else {
+          data.timer = { running: false };
+        }
+        return res.json(data);
+      }
+
+      // Fallback to live fetch and update cache
       try {
         const resp = await fetch(`http://${deviceObj.ip}/cm?cmnd=STATUS%200`);
         const data = await resp.json();
@@ -88,6 +111,9 @@ module.exports = (io) => {
         } else {
           data.timer = { running: false };
         }
+        // Update cache with current state
+        const state = data.Status?.Power === 'ON' ? 'on' : 'off';
+        deviceStates[deviceObj.endpoint] = { state, lastUpdated: Date.now() };
         res.json(data);
       } catch (err) {
         console.error('[Status]', err.message);
@@ -142,6 +168,13 @@ module.exports = (io) => {
         console.error('Failed to read devices file:', error)
         res.status(500).json({ error: 'Failed to read devices file' });
       }
+    });
+
+    // Device states cache endpoint
+    router.get('/device-states', (req, res) => {
+      // Access the global deviceStates cache from proxy-server
+      const cache = require('../../../proxy-server.cjs').deviceStates || {};
+      res.json(cache);
     });
     
     return router;

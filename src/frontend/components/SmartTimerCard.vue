@@ -15,6 +15,14 @@
     <button class="btn btn-outline-secondary btn-sm" @click="$emit('duplicate', timer)">
       Duplicate Timer
     </button>
+
+    <button
+      v-if="isHistorical && historyCount > 0"
+      class="btn btn-info btn-sm more-button"
+      @click="$emit('view-history', timer.label)"
+    >
+      +{{ historyCount }} more
+    </button>
     <template #actions>
       <SmartTimer
         :require-auth="!sessionState.user"
@@ -80,11 +88,11 @@ export default {
   components: { BaseDeviceCard, SmartTimer, RecipientsSelector, RecipientsList },
   props: {
     timer: { type: Object, required: true },
-    // users: { type: Array, required: true },
     devicesApi: { type: Object, required: true },
     usersApi: { type: Object, required: true },
     smartTimersApi: { type: Object, required: true },
-    isHistorical: { type: Boolean, default: false }
+    isHistorical: { type: Boolean, default: false },
+    historyCount: { type: Number, default: 0 }
   },
   data() {
     return {
@@ -181,3 +189,20 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.more-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+}
+
+/* Override ghosted styling for harmless buttons (read-only actions) */
+.more-button,
+.btn-outline-secondary {
+  pointer-events: auto !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+}
+</style>
