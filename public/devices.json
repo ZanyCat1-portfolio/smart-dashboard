@@ -25,6 +25,19 @@
     "verified": false,
     "example": false
   },
+  "_wled": true,
+  "wled-device-1": {
+    "type": "wled-controller",
+    "mdnsName": "bluespruce",
+    "label": "Blue Spruce",
+    "verified": true
+  },
+  "wled-device-2": {
+    "type": "wled-controller",
+    "mdnsName": "osa-256", 
+    "label": "Osanna's Matrix",
+    "verified": true
+  },
   "_govee": true,
   "tv-led": {
     "type": "govee",

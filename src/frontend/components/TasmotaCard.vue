@@ -41,6 +41,7 @@
         <button
           class="btn btn-danger timer-btn"
           @click="cancelTimer"
+          style="min-width: 100px; flex-shrink: 0;"
           :style="{
             opacity: isTimerRunning ? 1 : 0,
             pointerEvents: isTimerRunning ? 'auto' : 'none',

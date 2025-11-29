@@ -14,6 +14,9 @@ module.exports = (io, deviceStates) => {
     const exampleGoveeApi = require('./govee/example-govee-api')(io);
     const goveeApi = require('./govee/govee-api')(io);
 
+    const exampleWledApi = require('./wled/example-wled-api')(io);
+    const wledApi = require('./wled/wled-api')(io, deviceStates);
+
     const authLoginApi = require('./auth/login-api')(io);
     const authLogoutApi = require('./auth/logout-api')(io);
     const authSessionApi = require('./auth/session-api')(io);
@@ -27,6 +30,9 @@ module.exports = (io, deviceStates) => {
 
     router.use('/example-govee', exampleGoveeApi);
     router.use('/govee', goveeApi);
+
+    router.use('/example-wled', exampleWledApi);
+    router.use('/wled', wledApi);
 
     router.use('/auth/login', authLoginApi);
     router.use('/auth/logout', authLogoutApi);

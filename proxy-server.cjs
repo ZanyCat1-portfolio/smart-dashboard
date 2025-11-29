@@ -20,9 +20,10 @@ const webpush = require('web-push');
 const mqttClient = require('./src/backend/mqtt/mqtt-client');
 
 // ─── Backend Utilities ───
-const { getCurrentDemoTimerStates } = require('./src/backend/utils/apiHelpers');
+const { getCurrentDemoTimerStates, resolveWledIp } = require('./src/backend/utils/apiHelpers');
 const { publishSmartTimerState, subscribeSmartTimerTopics } = require('./src/backend/utils/smartTimer-mqtt');
 const { logMqtt } = require('./src/backend/utils/logger');
+const WledClientManager = require('./src/backend/utils/wledClientManager');
 
 // ─── Data Access Layer ───
 const smartTimerDAL = require('./src/backend/dal/smartTimer-dal.js');
@@ -70,6 +71,47 @@ function logError(...args) {
 // ═══════════════════════════════════════════════════════════════
 // DEVICE STATE POLLING
 // ═══════════════════════════════════════════════════════════════
+
+async function pollWledDevicesAndConnect() {
+  const devicesPath = path.join(__dirname, 'public', 'devices.json');
+  let devices;
+  try {
+    devices = JSON.parse(fs.readFileSync(devicesPath, 'utf8'));
+  } catch (error) {
+    logError('[WLED Connect] Could not read devices.json:', error.message);
+    return;
+  }
+
+  devLog('[WLED Connect] Starting WLED device connection...');
+
+  for (const [key, device] of Object.entries(devices)) {
+    if (key.startsWith('_') || device.type !== 'wled-controller' || !device.verified || device.example) continue;
+
+    const endpoint = key.toLowerCase().replace(/\s+/g, '');
+    const deviceId = `wled-${endpoint}`;
+
+    // Disconnect existing connection if any
+    if (wledClientManager.isDeviceConnected(deviceId)) {
+      wledClientManager.disconnectDevice(deviceId);
+    }
+
+    try {
+      // Resolve the IP address for the WLED device
+      const ip = await resolveWledIp(device.mdnsName);
+
+      devLog(`[WLED Connect] Connecting to ${endpoint} at ${ip}`);
+
+      // Establish WebSocket connection for real-time updates
+      await wledClientManager.connectDevice(deviceId, endpoint, ip);
+
+    } catch (error) {
+      devLog(`[WLED Connect] Failed to resolve/connect to ${endpoint}:`, error.message);
+      // Continue without this device - don't fail the entire initialization
+    }
+  }
+
+  devLog('[WLED Connect] WLED device connection setup completed');
+}
 
 async function pollTasmotaDevicesStatus() {
   const devicesPath = path.join(__dirname, 'public', 'devices.json');
@@ -174,8 +216,16 @@ app.use((req, res, next) => {
 // START SERVER EXECUTION
 // ═══════════════════════════════════════════════════════════════
 
+// Initialize WLED client manager
+const wledClientManager = new WledClientManager(io);
+
+// Set WLED client manager reference for API routes
+const { setWledClientManager } = require('./src/backend/api/wled/wled-api');
+setWledClientManager(wledClientManager);
+
 // Poll device states after verification
 pollTasmotaDevicesStatus();
+pollWledDevicesAndConnect();
 
 // ═══════════════════════════════════════════════════════════════
 // MQTT SETUP

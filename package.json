@@ -22,11 +22,13 @@
     "express-list-endpoints": "^7.1.1",
     "express-session": "^1.18.2",
     "mqtt": "^5.13.0",
+    "multicast-dns": "^7.2.5",
     "node-fetch": "^2.7.0",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
     "vue": "^3.4.15",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "wled-client": "^0.22.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.6",
