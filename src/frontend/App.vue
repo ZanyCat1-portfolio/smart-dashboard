@@ -111,9 +111,9 @@
                   :get-api-route="getApiRoute"
                   :timer-state="timerStates[device.endpoint]"
                   :timer-display="timerDisplays[device.endpoint]"
-                  :on-start-timer="(minutes) => startTimer(device, minutes)"
-                  :on-add-to-timer="(minutes) => addToTimer(device, minutes)"
-                  :on-cancel-timer="() => cancelTimer(device)"
+                  :on-start-timer="(minutes) => getTimerFunctions(device).startTimer(device, minutes)"
+                  :on-add-to-timer="(minutes) => getTimerFunctions(device).addToTimer(device, minutes)"
+                  :on-cancel-timer="() => getTimerFunctions(device).cancelTimer(device)"
                   @refresh="fetchStatus(device)"
                 />
               </div>
@@ -142,10 +142,12 @@ import { ref, onMounted, nextTick } from 'vue'
 import socket from './composables/useSocket'
 import TasmotaCard from './components/TasmotaCard.vue'
 import GoveeCard from './components/GoveeCard.vue'
+import WledCard from './components/WledCard.vue'
 import SmartTimerCard from './components/SmartTimerCard.vue'
 import SmartTimerCreateForm from './components/SmartTimerCreateForm.vue'
 import DeviceRegistration from './components/DeviceRegistration.vue'
 import { useTasmotaTimers } from './composables/useTasmotaTimers'
+import { useDeviceTimers } from './composables/useDeviceTimers'
 import { useSmartTimers } from './composables/useSmartTimers'
 import { useDevices } from './composables/useDevices'
 import { useUsers } from './composables/useUsers'
@@ -173,6 +175,7 @@ export default {
   components: {
     TasmotaCard,
     GoveeCard,
+    WledCard,
     SmartTimerCard,
     SmartTimerCreateForm,
     DeviceRegistration,
@@ -242,6 +245,7 @@ export default {
   },
   async mounted() {
     // 1. Register all composables immediately!
+    const deviceTimersApi = useDeviceTimers({ socket });
     const tasmotaApi = useTasmotaTimers({ socket, getApiRoute: this.getApiRoute });
     const smartTimersApi = useSmartTimers({ socket });
     this.smartTimersApi = smartTimersApi;
@@ -250,13 +254,14 @@ export default {
     const usersApi = useUsers({ socket });
     this.usersApi = usersApi;
 
+    // Store both timer APIs for device-specific use
+    this.deviceTimersApi = deviceTimersApi;
+    this.tasmotaApi = tasmotaApi;
+
+    // Use Tasmota API for initial state (MQTT-based)
     this.deviceStates = tasmotaApi.deviceStates;
     this.timerStates = tasmotaApi.timerStates;
     this.timerDisplays = tasmotaApi.timerDisplays;
-    this.startTimer = tasmotaApi.startTimer;
-    this.addToTimer = tasmotaApi.addToTimer;
-    this.cancelTimer = tasmotaApi.cancelTimer;
-    this.fetchAndSync = tasmotaApi.fetchAndSync;
     this.smartTimerStates = smartTimersApi.smartTimerStates;
     this.smartTimerDisplays = smartTimersApi.smartTimerDisplays;
     this.getSmartTimerDisplay = smartTimersApi.getSmartTimerDisplay;
@@ -298,6 +303,9 @@ export default {
 
     this.loadingDevices = false;
 
+    // Refresh timer states when window regains focus (e.g., on Android when app is reopened)
+    window.addEventListener('focus', this.handleWindowFocus);
+
     // window.__vue_root__.$data.sessionState.user
     const res = await frontendFetch("/api/auth/session")
     if (res.ok) {
@@ -312,6 +320,7 @@ export default {
   beforeUnmount() {
     if (this.dashboardTimerPoll) clearInterval(this.dashboardTimerPoll);
     if (this.tasmotaTimerPoll) clearInterval(this.tasmotaTimerPoll);
+    window.removeEventListener('focus', this.handleWindowFocus);
   },
   watch: {
     isLoggedIn(val) {
@@ -430,8 +439,9 @@ export default {
     },
     formatType(type) {
       switch (type) {
-        case 'tasmota': return 'Tasmota Devices';
-        case 'govee':   return 'Govee Devices';
+        case 'tasmota':     return 'Tasmota Devices';
+        case 'govee':       return 'Govee Devices';
+        case 'wled-controller': return 'WLED Controllers';
       }
     },
     toggleGroup(type) {
@@ -449,6 +459,9 @@ export default {
         if (device.type === 'tasmota') {
           return `${base}api/example-tasmota/${device.endpoint}/${action}`;
         }
+        if (device.type === 'wled-controller') {
+          return `${base}api/example-wled/${device.endpoint}/${action}`;
+        }
         return `${base}api/example/${device.endpoint}/${action}`;
       }
       if (device.type === 'govee') {
@@ -456,6 +469,9 @@ export default {
       }
       if (device.type === 'tasmota') {
         return `${base}api/tasmota/${device.endpoint}/${action}`;
+      }
+      if (device.type === 'wled-controller') {
+        return `${base}api/wled/${device.endpoint}/${action}`;
       }
     },
     async fetchStatus(device) {
@@ -497,10 +513,34 @@ export default {
     },
     getCardComponent(device) {
       switch (device.type) {
-        case 'tasmota': return 'TasmotaCard';
-        case 'govee':   return 'GoveeCard';
-        default:        return 'TasmotaCard';
+        case 'tasmota':       return 'TasmotaCard';
+        case 'govee':         return 'GoveeCard';
+        case 'wled-controller': return 'WledCard';
+        default:              return 'TasmotaCard';
       }
+    },
+    getTimerFunctions(device) {
+      // Use device-specific timer handling
+      if (device.type === 'tasmota') {
+        return {
+          startTimer: this.tasmotaApi.startTimer,
+          addToTimer: this.tasmotaApi.addToTimer,
+          cancelTimer: this.tasmotaApi.cancelTimer
+        };
+      } else {
+        // For WLED and other devices, use the device timers API
+        return {
+          startTimer: this.deviceTimersApi.startTimer,
+          addToTimer: this.deviceTimersApi.addToTimer,
+          cancelTimer: this.deviceTimersApi.cancelTimer
+        };
+      }
+    },
+    handleWindowFocus() {
+      // Refresh timer states when window gains focus (to update timers on Android app reopen)
+      this.devices.forEach(device => {
+        this.fetchTimerStatus(device);
+      });
     },
     devLog(...args) {
       if (!import.meta.env.PROD || localStorage.getItem('DEBUG') === 'true') {

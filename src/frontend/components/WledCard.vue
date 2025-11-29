@@ -134,8 +134,6 @@ export default {
         await fetch(url, { method: 'POST' })
         // Update device state cache
         this.$emit('refresh')
-        // Fetch actual status to confirm state
-        await this.fetchStatus()
       } catch (error) {
         console.error('[WLED] Toggle failed:', error)
         // Revert on error
