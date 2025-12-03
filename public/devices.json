@@ -34,8 +34,8 @@
   },
   "wled-device-2": {
     "type": "wled-controller",
-    "mdnsName": "osa-256", 
-    "label": "Osanna's Matrix",
+    "mdnsName": "osa-100", 
+    "label": "Osanna's Fairy Lights",
     "verified": true
   },
   "_govee": true,

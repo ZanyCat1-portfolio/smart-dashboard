@@ -273,7 +273,6 @@ export default {
       for (const [endpoint, { state }] of Object.entries(snapshot)) {
         this.deviceStates[endpoint] = state;
       }
-      devLog('[Socket] Loaded device states from snapshot:', Object.keys(this.deviceStates).length);
     });
 
     this.$nextTick(() => {
@@ -304,7 +303,10 @@ export default {
     this.loadingDevices = false;
 
     // Refresh timer states when window regains focus (e.g., on Android when app is reopened)
-    window.addEventListener('focus', this.handleWindowFocus);
+    // window.addEventListener('focus', this.handleWindowFocus);
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    window.addEventListener('pageshow', this.handleVisibilityChange);
+    window.addEventListener('focus', this.handleVisibilityChange);
 
     // window.__vue_root__.$data.sessionState.user
     const res = await frontendFetch("/api/auth/session")
@@ -320,7 +322,9 @@ export default {
   beforeUnmount() {
     if (this.dashboardTimerPoll) clearInterval(this.dashboardTimerPoll);
     if (this.tasmotaTimerPoll) clearInterval(this.tasmotaTimerPoll);
-    window.removeEventListener('focus', this.handleWindowFocus);
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    window.removeEventListener('pageshow', this.handleVisibilityChange);
+    window.removeEventListener('focus', this.handleVisibilityChange);
   },
   watch: {
     isLoggedIn(val) {
@@ -475,12 +479,14 @@ export default {
       }
     },
     async fetchStatus(device) {
-      const url = this.getApiRoute(device, 'status');
+      const url = `${this.getApiRoute(device, 'status')}?t=${Date.now()}`;
+
       try {
-        const res = await fetch(url);
+        const res = await fetch(url, {cache: 'no-store'});
         const jsn = await res.json();
 
         const raw =
+          jsn?.on ??
           jsn?.Status?.Power ??           // 1 / 0 / true / false / 'on' / 'off'
           jsn?.StatusSTS?.POWER;          // 'ON' / 'OFF'
 
@@ -494,7 +500,7 @@ export default {
       }
     },
     async fetchTimerStatus(device) {
-      const url = this.getApiRoute(device, 'timer/status');
+      const url = this.getApiRoute(device, 'timer/status') + `?t=${Date.now()}`;
       try {
         const res = await fetch(url);
         const statusJson = await res.json();
@@ -536,16 +542,12 @@ export default {
         };
       }
     },
-    handleWindowFocus() {
+    handleVisibilityChange() {
       // Refresh timer states when window gains focus (to update timers on Android app reopen)
       this.devices.forEach(device => {
+        this.fetchStatus(device);
         this.fetchTimerStatus(device);
       });
-    },
-    devLog(...args) {
-      if (!import.meta.env.PROD || localStorage.getItem('DEBUG') === 'true') {
-        console.log(...args);
-      }
     },
     handleViewHistory(label) {
       this.historyModalLabel = label;

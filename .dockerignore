@@ -19,3 +19,5 @@ cert/
  
 /my_notes
  build_images.sh
+
+deploy.sh
