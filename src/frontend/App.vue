@@ -294,11 +294,13 @@ export default {
     this.openGroups.smartTimers = true;
 
     // Load initial states from cache instead of fetching each
-    Promise.all(
-      this.devices.map(async device => {
-        await this.fetchTimerStatus(device); // still need timers
-      })
-    );
+    // Promise.all(
+    //   this.devices.map(async device => {
+    //     await this.fetchTimerStatus(device); // still need timers
+    //   })
+    // );
+
+    await this.handleVisibilityChange();
 
     this.loadingDevices = false;
 

@@ -45,6 +45,7 @@ module.exports = (io, deviceStates) => {
             body: JSON.stringify({ on: false })
           });
           io.emit('timer-update', { device: deviceObj.endpoint, running: false });
+          io.emit('device-status', { endpoint: deviceObj.endpoint, state: 'off' }); // Immediate update on cancel
           return res.json({ success: true, cancelled: true });
         }
 
@@ -73,6 +74,7 @@ module.exports = (io, deviceStates) => {
               body: JSON.stringify({ on: false })
             });
             io.emit('timer-update', { device: deviceObj.endpoint, running: false });
+            io.emit('device-status', { endpoint: deviceObj.endpoint, state: 'off' }); // Immediate update on expiry
           } catch (error) {
             console.error('[WLED Timer Expiry Error]', error.message);
           }
@@ -82,8 +84,8 @@ module.exports = (io, deviceStates) => {
         wledTimers[device] = { endTime, timeout };
 
         io.emit('timer-update', { device: deviceObj.endpoint, endTime, running: true });
-
-        res.json({ success: true, endTime });
+        io.emit('device-status', { endpoint: deviceObj.endpoint, state: 'on' }); // Immediate update
+        res.status(200).json({ success: true, endTime });
       } catch (error) {
         console.error('[WLED Timer] Error:', error.message);
         res.status(500).json({ error: 'Timer start failed' });
@@ -100,16 +102,37 @@ module.exports = (io, deviceStates) => {
       }
 
       try {
+        // Resolve IP
         const ip = await resolveWledIp(deviceObj.mdnsName);
-        const response = await fetch(`http://${ip}/json/state`);
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+        // Check if WebSocket manager has a live state (priority over HTTP fetch)
+        let onState = null;
+        let lastUpdatedFromWS = false;
+        const deviceId = deviceObj.endpoint; // Assuming deviceId in manager is endpoint
+        if (wledClientManager && wledClientManager.connectedDevices.has(deviceId)) {
+          const deviceInfo = wledClientManager.connectedDevices.get(deviceId);
+          if (deviceInfo.lastState) {
+            onState = deviceInfo.lastState === 'on';
+            lastUpdatedFromWS = true;
+          }
         }
 
-        const state = await response.json();
-        const timer = wledTimers[device];
+        let state;
+        if (lastUpdatedFromWS) {
+          // Use WebSocket-updated state, skip HTTP fetch to avoid stale data
+          state = { on: onState };
+        } else {
+          // Fallback to HTTP fetch if WebSocket not providing live state
+          const response = await fetch(`http://${ip}/json/state`);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          state = await response.json();
+          onState = state.on ? 'on' : 'off';
+        }
 
+        // Add timer info
+        const timer = wledTimers[device];
         if (timer && timer.endTime > Date.now()) {
           state.timer = {
             running: true,
@@ -120,12 +143,16 @@ module.exports = (io, deviceStates) => {
           state.timer = { running: false };
         }
 
-        // Include resolved IP for frontend Web UI button
-        state.resolved_ip = ip;
+        // Include resolved IP for frontend Web UI button (only add if not added)
+        if (!lastUpdatedFromWS || !state.resolved_ip) {
+          state.resolved_ip = ip;
+        }
 
         // Update cache with current state
-        const onState = state.on ? 'on' : 'off';
-        deviceStates[deviceObj.endpoint] = { state: onState, lastUpdated: Date.now() };
+        const finalOnState = onState !== null ? (onState ? 'on' : 'off') : undefined;
+        if (finalOnState) {
+          deviceStates[deviceObj.endpoint] = { state: finalOnState, lastUpdated: Date.now() };
+        }
 
         res.json(state);
       } catch (error) {
