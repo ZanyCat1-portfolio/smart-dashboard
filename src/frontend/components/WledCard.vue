@@ -1,5 +1,7 @@
 <template>
+  <!-- baseDeviceCard needs the height and width/responsiveness -->
   <BaseDeviceCard
+    :class="resolvedIp ? '' : 'ghosted-card'" 
     :label="device.label"
     deviceType="wled-controller"
     icon="bi-lightbulb"
@@ -19,7 +21,6 @@
       </div>
       <div class="d-flex align-items-center mb-3 gap-2">
         <button
-          v-if="resolvedIp"
           class="btn btn-outline-primary btn-sm ms-auto"
           @click="openWledWebUI"
           title="Open WLED Web UI"
@@ -223,3 +224,28 @@ export default {
   }
 }
 </script>
+<style scoped>
+  .ghosted-card {
+    position: relative;
+    pointer-events: none;
+    background-color: rgba(128, 128, 128, 0.5);
+    z-index: 10;
+    
+  }
+  .ghosted-card::after {
+    content: "DISCONNECTED";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    color: red;
+    font-size: 2.5em;
+    font-family: 'Impact';
+    -webkit-text-stroke-width: 2px;
+    -webkit-text-stroke-color: red; /* Outline color */
+    -webkit-text-fill-color: white;
+    text-shadow: 2px 2px 4px #000000;
+    z-index: 10;
+    transform: translate(-50%, -50%) rotate(-22.5deg);
+    
+  }
+</style>

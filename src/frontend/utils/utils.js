@@ -46,3 +46,13 @@ export async function frontendFetch(endpoint, options = {}) {
   const url = base.replace(/\/+$/, '') + '/' + endpoint.replace(/^\/+/, '');
   return fetch(url, options)
 }
+
+export function eventLogger(message) {
+  fetch('/api/events/event', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ msg: `[EventLogger] ${message}`})
+  }).catch(() => {
+    console.warn("[EventLogger]: sorry, event logging didn't work")
+  })
+}

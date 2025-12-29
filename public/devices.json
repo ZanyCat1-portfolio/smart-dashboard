@@ -34,8 +34,20 @@
   },
   "wled-device-2": {
     "type": "wled-controller",
-    "mdnsName": "osa-100", 
-    "label": "Osanna's Fairy Lights",
+    "mdnsName": "hearth-fairy-string", 
+    "label": "Hearth Lights",
+    "verified": true
+  },
+    "wled-device-3": {
+    "type": "wled-controller",
+    "mdnsName": "osa-256",
+    "label": "Osa's 256-LED Matrix",
+    "verified": true
+  },
+  "wled-device-4": {
+    "type": "wled-controller",
+    "mdnsName": "frontlights",
+    "label": "Garage and Carport Lights",
     "verified": true
   },
   "_govee": true,

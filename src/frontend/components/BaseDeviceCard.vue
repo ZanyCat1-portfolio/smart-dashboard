@@ -10,6 +10,7 @@
         </span>
         <span
           class="fw-bold flex-grow-1 no-wrap"
+          style="text-overflow: ellipsis; overflow: hidden"
           :class="isHistorical ? 'timer-title timer-title-historical' : 'timer-title timer-title-active'"
           :title="label"
         >{{ label }}</span>

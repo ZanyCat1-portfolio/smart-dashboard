@@ -21,6 +21,8 @@ module.exports = (io, deviceStates) => {
     const authLogoutApi = require('./auth/logout-api')(io);
     const authSessionApi = require('./auth/session-api')(io);
 
+    const events = require('./events/event')(io);
+
     router.use('/smart-timers', smartTimerApi);
     router.use('/devices', deviceApi);
     router.use('/users', userApi);
@@ -37,6 +39,8 @@ module.exports = (io, deviceStates) => {
     router.use('/auth/login', authLoginApi);
     router.use('/auth/logout', authLogoutApi);
     router.use('/auth/session', authSessionApi);
+
+    router.use('/events', events);
 
     return router;
 }

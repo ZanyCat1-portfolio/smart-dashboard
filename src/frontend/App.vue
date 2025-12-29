@@ -157,12 +157,11 @@ import RegisterForm from './components/RegisterForm.vue'
 import SmartTimersSection from './components/SmartTimersSection.vue'
 import SmartTimerHistoryModal from './components/SmartTimerHistoryModal.vue'
 import { state as sessionState, useSession } from './composables/useSessions'
-import { frontendFetch } from './utils/utils'
+import { eventLogger, frontendFetch } from './utils/utils'
 // import deviceStore from './stores/deviceStore'
 
 const navbarRef = ref(null)
 const navbarHeight = ref(0)
-
 
 const TIMEOUT_DAYS = 24
 const TIMEOUT_MINUTES = TIMEOUT_DAYS * 1440;
@@ -216,6 +215,11 @@ export default {
       navbarHeight: 0,
       showHistoryModal: false,
       historyModalLabel: '',
+
+      lastInteractionTimestamp: 0,
+      resumeThreshold: 1000 * 60 * 5,
+      interactionLock: false,
+      needsResumeRefresh: false
     }
   },
   computed: {
@@ -244,13 +248,18 @@ export default {
     },
   },
   async mounted() {
+
+    console.log("does eventLogger work?")
+    eventLogger("v2025-12-05 13:37")
     // 1. Register all composables immediately!
     const deviceTimersApi = useDeviceTimers({ socket });
     const tasmotaApi = useTasmotaTimers({ socket, getApiRoute: this.getApiRoute });
     const smartTimersApi = useSmartTimers({ socket });
     this.smartTimersApi = smartTimersApi;
+
     const devicesApi = useDevices({ socket });
     this.devicesApi = devicesApi;
+
     const usersApi = useUsers({ socket });
     this.usersApi = usersApi;
 
@@ -293,40 +302,89 @@ export default {
     Object.keys(this.groupedDevices).forEach(type => { this.openGroups[type] = true; });
     this.openGroups.smartTimers = true;
 
-    // Load initial states from cache instead of fetching each
-    // Promise.all(
-    //   this.devices.map(async device => {
-    //     await this.fetchTimerStatus(device); // still need timers
-    //   })
-    // );
-
-    await this.handleVisibilityChange();
+    await this.runFullRefresh();
 
     this.loadingDevices = false;
 
-    // Refresh timer states when window regains focus (e.g., on Android when app is reopened)
-    // window.addEventListener('focus', this.handleWindowFocus);
-    document.addEventListener('visibilitychange', this.handleVisibilityChange);
-    window.addEventListener('pageshow', this.handleVisibilityChange);
-    window.addEventListener('focus', this.handleVisibilityChange);
+    // document.addEventListener("visibilitychange", () => {
+    //   if (document.visibilityState === "hidden") {
+    //     this.needsResumeRefresh = true;
+    //     eventLogger("visibilitychange -> hidden")
+    //   } else {
+    //     eventLogger("visibilitychange -> visible")
+    //   }
+    // })
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        this.needsResumeRefresh = true;
+        eventLogger("visibilitychange -> hidden")
+      } else {
+        this.needsResumeRefresh = true;
+        eventLogger("visibilitychange -> visible")
+      }
+    })
+
+    const onUserInteraction = () => {
+      if (this.interactionLock) return
+      this.interactionLock = true
+
+      const now = Date.now()
+      const diff = now - this.lastInteractionTimestamp
+
+      if (diff > this.resumeThreshold || this.needsResumeRefresh) {
+        eventLogger(
+          `refresh triggered, diff is [${diff}], needsResumeRefresh state is [${this.needsResumeRefresh}]`
+        )
+        this.runFullRefresh()
+        this.needsResumeRefresh = false
+      }
+
+      this.lastInteractionTimestamp = now
+
+      setTimeout(() => {
+        this.interactionLock = false
+      }, 300)
+    }
+
+    this.onUserInteraction = onUserInteraction
+
+    window.addEventListener('pageshow', () => {
+      this.needsResumeRefresh = true
+      eventLogger("pageshow -> needsResumeRefresh=true")
+    });
+
+    window.addEventListener('focus', () => {
+      this.needsResumeRefresh = true
+      eventLogger("focus -> needsResumeRefresh=true")
+    });
+
+    window.addEventListener('pointerdown', this.onUserInteraction);
+    window.addEventListener('touchstart', this.onUserInteraction);
+    window.addEventListener('click', this.onUserInteraction);
 
     // window.__vue_root__.$data.sessionState.user
     const res = await frontendFetch("/api/auth/session")
     if (res.ok) {
-      const data = await res.json();
-      sessionState.user = data.user;
-      localStorage.setItem('user', JSON.stringify(data.user));
+      const data = await res.json()
+      sessionState.user = data.user
+      localStorage.setItem('user', JSON.stringify(data.user))
     } else {
       sessionState.user = null;
       localStorage.removeItem('user')
     }
+
+    this.lastInteractionTimestamp = Date.now()
   },
   beforeUnmount() {
     if (this.dashboardTimerPoll) clearInterval(this.dashboardTimerPoll);
     if (this.tasmotaTimerPoll) clearInterval(this.tasmotaTimerPoll);
-    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
-    window.removeEventListener('pageshow', this.handleVisibilityChange);
-    window.removeEventListener('focus', this.handleVisibilityChange);
+    
+    if (this.onUserInteraction) {
+      window.removeEventListener('pointerdown', this.onUserInteraction);
+      window.removeEventListener('touchstart', this.onUserInteraction);
+      window.removeEventListener('click', this.onUserInteraction);
+    }
   },
   watch: {
     isLoggedIn(val) {
@@ -544,8 +602,9 @@ export default {
         };
       }
     },
-    handleVisibilityChange() {
-      // Refresh timer states when window gains focus (to update timers on Android app reopen)
+    runFullRefresh() {
+      eventLogger("runFullRefresh")
+      
       this.devices.forEach(device => {
         this.fetchStatus(device);
         this.fetchTimerStatus(device);
