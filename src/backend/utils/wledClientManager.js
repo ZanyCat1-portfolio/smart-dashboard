@@ -20,6 +20,23 @@ class WledClientManager {
     try {
       console.log(`[WLED Client] Connecting to ${endpoint} at ${ip}`);
 
+      // Verify device is actually reachable before opening WebSocket
+      try {
+        const response = await fetch(`http://${ip}/json/info`, {
+          signal: AbortSignal.timeout(3000)
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+      } catch (error) {
+        console.warn(
+          `[WLED Client] ${endpoint} unreachable at ${ip}, skipping WebSocket init:`,
+          error.message
+        );
+        return;
+      }
+
       // Create WLED client instance
       const wledClient = new WLEDClient(ip);
 
@@ -49,6 +66,11 @@ class WledClientManager {
       try {
         // WLEDClient automatically keeps state updated via WebSocket
         const currentState = wledClient.state;
+
+        if (!currentState || typeof currentState.on === 'undefined') {
+          return;
+        }
+
         const deviceState = currentState.on ? 'on' : 'off';
 
         const deviceInfo = this.connectedDevices.get(deviceId);
